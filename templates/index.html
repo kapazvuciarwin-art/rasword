@@ -263,6 +263,58 @@
             border-radius: 4px;
         }
         
+        .batch-progress {
+            margin-top: 15px;
+            padding: 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+        }
+        
+        .progress-text {
+            margin-bottom: 10px;
+            color: #555;
+            font-weight: bold;
+        }
+        
+        .progress-bar {
+            height: 20px;
+            background: #e0e0e0;
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            width: 0%;
+            transition: width 0.3s ease;
+            border-radius: 10px;
+        }
+        
+        .batch-result {
+            margin-top: 15px;
+        }
+        
+        .batch-result-success {
+            background: #d4edda;
+            color: #155724;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .batch-result-error {
+            background: #f8d7da;
+            color: #721c24;
+            padding: 15px;
+            border-radius: 8px;
+        }
+        
+        .batch-result-error ul {
+            margin: 10px 0 0 20px;
+            padding: 0;
+        }
+        
         /* 單字列表 */
         .word-list {
             margin-top: 30px;
@@ -624,7 +676,23 @@
                 </form>
                 
                 <div class="batch-area">
-                    <h2>批次輸入</h2>
+                    <h2>🤖 批次 AI 生成</h2>
+                    <div class="batch-hint">
+                        <p>每行輸入一個日文詞，AI 會自動生成所有資訊並儲存：</p>
+                    </div>
+                    <div class="form-group">
+                        <textarea id="batch-ai-input" placeholder="食べる&#10;飲む&#10;行く&#10;来る"></textarea>
+                    </div>
+                    <button class="btn btn-ai" id="batch-ai-btn" onclick="batchAIGenerate()">🤖 批次 AI 生成並儲存</button>
+                    <div id="batch-ai-progress" class="batch-progress" style="display: none;">
+                        <div class="progress-text">處理中...</div>
+                        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+                    </div>
+                    <div id="batch-ai-result" class="batch-result"></div>
+                </div>
+                
+                <div class="batch-area">
+                    <h2>📋 批次手動輸入</h2>
                     <div class="batch-hint">
                         <p>每行一個單字，使用 <code>|</code> 分隔各欄位：</p>
                         <p><code>日文詞|詞性|假名|漢字|常用(kanji/hiragana/katakana/both)|例句1|例句2|簡短中文|完整中文|日文解釋</code></p>
@@ -792,6 +860,87 @@
                 alert('新增失敗：' + error.message);
             }
         });
+        
+        // 批次 AI 生成
+        async function batchAIGenerate() {
+            const text = document.getElementById('batch-ai-input').value.trim();
+            if (!text) {
+                alert('請輸入要生成的詞彙（每行一個）');
+                return;
+            }
+            
+            const wordCount = text.split('\n').filter(w => w.trim()).length;
+            if (wordCount === 0) {
+                alert('沒有有效的詞彙');
+                return;
+            }
+            
+            const btn = document.getElementById('batch-ai-btn');
+            const progressDiv = document.getElementById('batch-ai-progress');
+            const progressText = progressDiv.querySelector('.progress-text');
+            const progressFill = document.getElementById('progress-fill');
+            const resultDiv = document.getElementById('batch-ai-result');
+            
+            // 顯示進度
+            btn.disabled = true;
+            btn.textContent = '⏳ 生成中...';
+            progressDiv.style.display = 'block';
+            progressText.textContent = `正在處理 ${wordCount} 個詞彙，請稍候...（這可能需要一些時間）`;
+            progressFill.style.width = '10%';
+            resultDiv.innerHTML = '';
+            
+            try {
+                const response = await fetch('/api/generate-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        words: text,
+                        api_key: getApiKey()
+                    })
+                });
+                
+                progressFill.style.width = '100%';
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    resultDiv.innerHTML = `<div class="batch-result-error">❌ ${result.error}</div>`;
+                    return;
+                }
+                
+                // 顯示結果
+                let html = `<div class="batch-result-success">
+                    ✅ 完成！共 ${result.total} 個詞彙，成功 ${result.completed} 個，失敗 ${result.failed} 個
+                </div>`;
+                
+                if (result.errors && result.errors.length > 0) {
+                    html += `<div class="batch-result-error">
+                        ⚠️ 以下詞彙生成失敗：
+                        <ul>`;
+                    for (const err of result.errors) {
+                        html += `<li><strong>${err.word}</strong>: ${err.error}</li>`;
+                    }
+                    html += `</ul></div>`;
+                }
+                
+                resultDiv.innerHTML = html;
+                
+                // 清空輸入
+                if (result.completed > 0) {
+                    document.getElementById('batch-ai-input').value = '';
+                }
+                
+            } catch (error) {
+                resultDiv.innerHTML = `<div class="batch-result-error">❌ 生成失敗：${error.message}</div>`;
+            } finally {
+                btn.disabled = false;
+                btn.textContent = '🤖 批次 AI 生成並儲存';
+                setTimeout(() => {
+                    progressDiv.style.display = 'none';
+                    progressFill.style.width = '0%';
+                }, 2000);
+            }
+        }
         
         // 批次匯入
         async function batchImport() {

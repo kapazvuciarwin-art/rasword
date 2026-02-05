@@ -242,6 +242,107 @@ def generate_word_info():
     except Exception as e:
         return jsonify({'error': f'生成失敗: {str(e)}'}), 500
 
+@app.route('/api/generate-batch', methods=['POST'])
+def generate_batch():
+    """批次 AI 生成並儲存單字"""
+    data = request.json
+    words_text = data.get('words', '').strip()
+    custom_api_key = data.get('api_key', '').strip()
+    
+    api_key = custom_api_key if custom_api_key else DEFAULT_GEMINI_API_KEY
+    
+    if not api_key:
+        return jsonify({'error': '請設定 API Key'}), 400
+    
+    if not words_text:
+        return jsonify({'error': '請輸入要生成的詞彙'}), 400
+    
+    # 分割詞彙（每行一個）
+    word_list = [w.strip() for w in words_text.split('\n') if w.strip()]
+    
+    if not word_list:
+        return jsonify({'error': '沒有有效的詞彙'}), 400
+    
+    results = []
+    errors = []
+    
+    try:
+        genai_module = get_genai_module()
+        genai_module.configure(api_key=api_key)
+        
+        # 找到可用的模型
+        working_model = None
+        for model_name in MODEL_PRIORITY:
+            try:
+                working_model = genai_module.GenerativeModel(model_name)
+                # 測試模型
+                working_model.generate_content("test")
+                break
+            except:
+                continue
+        
+        if not working_model:
+            return jsonify({'error': '無法連接到 AI 模型'}), 500
+        
+        conn = get_db()
+        
+        for japanese_word in word_list:
+            try:
+                prompt = f"""請分析這個日文詞彙「{japanese_word}」，並以 JSON 格式回傳以下資訊：
+1. part_of_speech: 詞性（如：名詞、動詞、形容詞、副詞等）
+2. sentence1: 一個常用的日文例句（使用這個詞）
+3. sentence2: 另一個常用的日文例句（使用這個詞）
+4. chinese_short: 繁體中文簡短解釋（1-3個字，只寫最核心的意思，例如：吃、喝、貓、漂亮）
+5. chinese_meaning: 繁體中文完整解釋
+6. jlpt_level: 用日文解釋這個詞的意思（像日日辭典一樣，純日文定義）
+7. kana_form: 這個詞的純假名寫法（平假名或片假名）
+8. kanji_form: 這個詞的漢字寫法（如果有的話，沒有就留空）
+9. common_form: 最常用的寫法是哪種？回答 "kanji"（漢字常用）、"hiragana"（平假名常用）、"katakana"（片假名常用，常見於副詞、擬聲詞、外來語等）或 "both"（兩者都常用）
+
+只回傳純 JSON，不要有其他文字或 markdown 格式。"""
+
+                response = working_model.generate_content(prompt)
+                result_text = response.text.strip()
+                
+                # 清理可能的 markdown 格式
+                if result_text.startswith('```'):
+                    lines = result_text.split('\n')
+                    result_text = '\n'.join(lines[1:-1])
+                
+                result = json.loads(result_text)
+                
+                # 儲存到資料庫
+                conn.execute('''
+                    INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (japanese_word, result.get('part_of_speech', ''), result.get('sentence1', ''),
+                      result.get('sentence2', ''), result.get('chinese_meaning', ''),
+                      result.get('chinese_short', ''), result.get('jlpt_level', ''),
+                      result.get('kana_form', ''), result.get('kanji_form', ''),
+                      result.get('common_form', 'kanji')))
+                
+                results.append({'word': japanese_word, 'success': True})
+                
+            except json.JSONDecodeError as e:
+                errors.append({'word': japanese_word, 'error': f'JSON 解析錯誤: {str(e)}'})
+            except Exception as e:
+                errors.append({'word': japanese_word, 'error': str(e)})
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'total': len(word_list),
+            'completed': len(results),
+            'failed': len(errors),
+            'results': results,
+            'errors': errors
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'批次生成失敗: {str(e)}'}), 500
+
 @app.route('/api/typing-quiz', methods=['GET'])
 def get_typing_quiz():
     """打字測驗 - 顯示漢字，回答假名"""
