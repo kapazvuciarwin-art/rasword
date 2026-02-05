@@ -165,7 +165,10 @@ def get_quiz():
             'sentence1': question_word['sentence1'],
             'sentence2': question_word['sentence2'],
             'jlpt_level': question_word['jlpt_level'],
-            'correct_meaning': question_word['chinese_meaning']
+            'correct_meaning': question_word['chinese_meaning'],
+            'kana_form': question_word['kana_form'],
+            'kanji_form': question_word['kanji_form'],
+            'common_form': question_word['common_form']
         },
         'options': options
     })

@@ -164,6 +164,16 @@
             transform: none;
         }
         
+        .btn-info {
+            background: linear-gradient(135deg, #17a2b8 0%, #138496 100%);
+            color: white;
+        }
+        
+        .btn-info:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(23, 162, 184, 0.4);
+        }
+        
         /* 設定頁面樣式 */
         .settings-section {
             max-width: 600px;
@@ -337,6 +347,33 @@
             background: #e8f4f8;
             color: #2c5282;
             border-left: 4px solid #4299e1;
+        }
+        
+        .kana-hint-box {
+            background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%);
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+            border-left: 4px solid #00bcd4;
+        }
+        
+        .kana-hint-box p {
+            margin: 8px 0;
+            color: #006064;
+        }
+        
+        .kana-text, .kanji-text {
+            font-size: 20px;
+            font-weight: bold;
+            margin-left: 10px;
+        }
+        
+        .common-form-note {
+            font-size: 14px;
+            color: #00838f !important;
+            margin-top: 12px !important;
+            padding-top: 10px;
+            border-top: 1px dashed #80deea;
         }
         
         .options-grid {
@@ -855,8 +892,10 @@
                     <span>詞性：${q.part_of_speech || '未設定'}</span>
                 </div>
                 <div class="hint-area" id="hint-area"></div>
+                <div id="kana-hint-area"></div>
                 <div class="quiz-controls">
                     <button class="btn btn-warning" onclick="showHint()">💡 提示（${3 - hintCount} 個）</button>
+                    <button class="btn btn-info" onclick="showKanaHint()">あ 顯示假名</button>
                 </div>
                 <div class="options-grid" id="options-grid">
                     ${optionsHtml}
@@ -974,6 +1013,43 @@
             } else {
                 detailArea.style.display = 'none';
             }
+        }
+        
+        // 顯示假名提示
+        function showKanaHint() {
+            const kanaHintArea = document.getElementById('kana-hint-area');
+            const q = currentQuiz.question;
+            
+            // 如果已經顯示就隱藏
+            if (kanaHintArea.innerHTML) {
+                kanaHintArea.innerHTML = '';
+                return;
+            }
+            
+            const commonFormText = {
+                'kanji': '📝 漢字寫法較常用',
+                'kana': '🔤 假名寫法較常用',
+                'both': '⚖️ 兩種寫法都常用'
+            };
+            
+            let html = '<div class="kana-hint-box">';
+            
+            if (q.kana_form) {
+                html += `<p><strong>假名：</strong><span class="kana-text">${q.kana_form}</span></p>`;
+            }
+            if (q.kanji_form) {
+                html += `<p><strong>漢字：</strong><span class="kanji-text">${q.kanji_form}</span></p>`;
+            }
+            if (q.common_form) {
+                html += `<p class="common-form-note">${commonFormText[q.common_form] || ''}</p>`;
+            }
+            
+            if (!q.kana_form && !q.kanji_form) {
+                html += `<p>尚無假名/漢字資料</p>`;
+            }
+            
+            html += '</div>';
+            kanaHintArea.innerHTML = html;
         }
         
         // 重新作答
