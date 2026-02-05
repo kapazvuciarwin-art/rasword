@@ -359,11 +359,98 @@
         
         .rate-limit-info {
             background: #e9ecef;
-            padding: 10px 15px;
+            padding: 15px;
             border-radius: 8px;
-            margin-top: 10px;
+            margin-top: 20px;
             font-size: 13px;
             color: #555;
+        }
+        
+        .rate-limit-info h3 {
+            margin: 0 0 10px 0;
+            font-size: 14px;
+        }
+        
+        .rate-limit-info p {
+            margin: 5px 0;
+        }
+        
+        .api-keys-list {
+            margin-bottom: 20px;
+        }
+        
+        .api-key-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 12px 15px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 2px solid #e0e0e0;
+        }
+        
+        .api-key-item.active {
+            border-color: #28a745;
+            background: #f0fff4;
+        }
+        
+        .api-key-info {
+            flex: 1;
+        }
+        
+        .api-key-name {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .api-key-preview {
+            font-family: monospace;
+            font-size: 12px;
+            color: #666;
+        }
+        
+        .api-key-status {
+            font-size: 12px;
+            padding: 4px 8px;
+            border-radius: 12px;
+            background: #e9ecef;
+        }
+        
+        .api-key-status.available {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .api-key-status.limited {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .api-key-status.exhausted {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .add-api-key-section {
+            padding: 20px;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .add-api-key-section h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        
+        .no-api-keys {
+            text-align: center;
+            padding: 30px;
+            color: #666;
+            background: #f8f9fa;
+            border-radius: 8px;
+            margin-bottom: 20px;
         }
         
         /* 單字列表 */
@@ -796,24 +883,37 @@
         <!-- 設定頁面 -->
         <div id="settings-tab" class="tab-content">
             <div class="settings-section">
-                <h2>⚙️ API 設定</h2>
-                <p class="settings-hint">如果內建的 Gemini API 無法使用，你可以填入自己的 API Key。</p>
+                <h2>⚙️ API Key 管理</h2>
+                <p class="settings-hint">你可以新增多個 Gemini API Key，系統會自動輪流使用以繞過速率限制。</p>
                 <p class="settings-hint">取得 API Key：<a href="https://aistudio.google.com/apikey" target="_blank">https://aistudio.google.com/apikey</a></p>
                 
-                <div class="form-group">
-                    <label>自訂 Gemini API Key</label>
-                    <input type="password" id="custom_api_key" placeholder="留空則使用內建 API Key">
+                <div class="api-keys-list" id="api-keys-list">
+                    <!-- API Keys 會動態載入這裡 -->
                 </div>
-                <div class="form-group">
-                    <label>
-                        <input type="checkbox" id="show_api_key" onchange="toggleApiKeyVisibility()">
-                        顯示 API Key
-                    </label>
+                
+                <div class="add-api-key-section">
+                    <h3>新增 API Key</h3>
+                    <div class="form-group">
+                        <label>API Key 名稱（選填）</label>
+                        <input type="text" id="new_api_key_name" placeholder="例如：我的 Key 1">
+                    </div>
+                    <div class="form-group">
+                        <label>Gemini API Key</label>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="password" id="new_api_key" placeholder="貼上 API Key" style="flex: 1;">
+                            <button class="btn btn-primary" onclick="addApiKey()">➕ 新增</button>
+                        </div>
+                    </div>
                 </div>
-                <button class="btn btn-primary" onclick="saveApiKey()">💾 儲存設定</button>
-                <button class="btn btn-secondary" onclick="clearApiKey()">🗑️ 清除自訂 Key</button>
                 
                 <div class="api-status" id="api-status"></div>
+                
+                <div class="rate-limit-info">
+                    <h3>📊 速率限制說明</h3>
+                    <p>• 每個 API Key 每 59 秒最多 5 次呼叫</p>
+                    <p>• 多個 Key 會自動輪流使用</p>
+                    <p>• 系統會優先選擇可用額度最多的 Key</p>
+                </div>
             </div>
         </div>
     </div>
@@ -823,17 +923,146 @@
         let hintCount = 0;
         let answered = false;
         
-        // 頁面載入時讀取儲存的 API Key
+        // 頁面載入時讀取儲存的 API Keys
         document.addEventListener('DOMContentLoaded', function() {
-            const savedKey = localStorage.getItem('custom_gemini_api_key');
-            if (savedKey) {
-                document.getElementById('custom_api_key').value = savedKey;
+            loadApiKeysList();
+            // 遷移舊的單一 API Key
+            const oldKey = localStorage.getItem('custom_gemini_api_key');
+            if (oldKey && !getApiKeys().length) {
+                const keys = [{ name: '預設 Key', key: oldKey, enabled: true }];
+                localStorage.setItem('gemini_api_keys', JSON.stringify(keys));
+                localStorage.removeItem('custom_gemini_api_key');
+                loadApiKeysList();
             }
         });
         
-        // 取得目前使用的 API Key
+        // 取得所有 API Keys
+        function getApiKeys() {
+            try {
+                return JSON.parse(localStorage.getItem('gemini_api_keys') || '[]');
+            } catch {
+                return [];
+            }
+        }
+        
+        // 儲存所有 API Keys
+        function saveApiKeys(keys) {
+            localStorage.setItem('gemini_api_keys', JSON.stringify(keys));
+        }
+        
+        // 取得目前使用的 API Key（輪流選擇可用的）
         function getApiKey() {
-            return localStorage.getItem('custom_gemini_api_key') || '';
+            const keys = getApiKeys().filter(k => k.enabled);
+            if (keys.length === 0) return '';
+            // 返回第一個啟用的 key（後端會選擇最佳的）
+            return keys.map(k => k.key).join(',');
+        }
+        
+        // 載入 API Keys 列表
+        async function loadApiKeysList() {
+            const container = document.getElementById('api-keys-list');
+            const keys = getApiKeys();
+            
+            if (keys.length === 0) {
+                container.innerHTML = `
+                    <div class="no-api-keys">
+                        <p>尚未新增任何 API Key</p>
+                        <p>請在下方新增你的 Gemini API Key</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            let html = '';
+            for (let i = 0; i < keys.length; i++) {
+                const key = keys[i];
+                const preview = key.key.substring(0, 10) + '...' + key.key.substring(key.key.length - 4);
+                const statusClass = key.enabled ? 'available' : 'exhausted';
+                const statusText = key.enabled ? '啟用' : '停用';
+                
+                html += `
+                    <div class="api-key-item ${key.enabled ? 'active' : ''}">
+                        <div class="api-key-info">
+                            <div class="api-key-name">${key.name || '未命名 Key'}</div>
+                            <div class="api-key-preview">${preview}</div>
+                        </div>
+                        <span class="api-key-status ${statusClass}">${statusText}</span>
+                        <button class="btn btn-secondary btn-small" onclick="toggleApiKey(${i})">
+                            ${key.enabled ? '停用' : '啟用'}
+                        </button>
+                        <button class="btn btn-danger btn-small" onclick="deleteApiKey(${i})">刪除</button>
+                    </div>
+                `;
+            }
+            
+            container.innerHTML = html;
+        }
+        
+        // 新增 API Key
+        function addApiKey() {
+            const name = document.getElementById('new_api_key_name').value.trim();
+            const key = document.getElementById('new_api_key').value.trim();
+            
+            if (!key) {
+                alert('請輸入 API Key');
+                return;
+            }
+            
+            if (key.length < 20) {
+                alert('API Key 格式不正確');
+                return;
+            }
+            
+            const keys = getApiKeys();
+            
+            // 檢查是否重複
+            if (keys.some(k => k.key === key)) {
+                alert('此 API Key 已存在');
+                return;
+            }
+            
+            keys.push({
+                name: name || `Key ${keys.length + 1}`,
+                key: key,
+                enabled: true
+            });
+            
+            saveApiKeys(keys);
+            loadApiKeysList();
+            
+            // 清空輸入
+            document.getElementById('new_api_key_name').value = '';
+            document.getElementById('new_api_key').value = '';
+            
+            const status = document.getElementById('api-status');
+            status.className = 'api-status success';
+            status.textContent = '✅ API Key 已新增！';
+            
+            updateRateLimitStatus();
+        }
+        
+        // 切換 API Key 啟用狀態
+        function toggleApiKey(index) {
+            const keys = getApiKeys();
+            if (keys[index]) {
+                keys[index].enabled = !keys[index].enabled;
+                saveApiKeys(keys);
+                loadApiKeysList();
+            }
+        }
+        
+        // 刪除 API Key
+        function deleteApiKey(index) {
+            if (!confirm('確定要刪除這個 API Key 嗎？')) return;
+            
+            const keys = getApiKeys();
+            keys.splice(index, 1);
+            saveApiKeys(keys);
+            loadApiKeysList();
+            
+            const status = document.getElementById('api-status');
+            status.className = 'api-status info';
+            status.textContent = 'ℹ️ API Key 已刪除';
         }
         
         // 更新速率限制狀態顯示
@@ -846,24 +1075,64 @@
                 });
                 
                 if (response.ok) {
-                    const status = await response.json();
+                    const data = await response.json();
                     const statusEl = document.getElementById('rate-limit-status');
                     if (statusEl) {
-                        if (status.remaining === 0) {
+                        const remaining = data.total_remaining;
+                        const max = data.total_max;
+                        const keyCount = data.key_count;
+                        
+                        if (remaining === 0) {
+                            // 找出最短等待時間
+                            let minWait = Math.min(...data.keys.map(k => k.wait_time));
                             statusEl.className = 'rate-limit-status danger';
-                            statusEl.textContent = `⏳ 等待 ${status.wait_time}秒`;
-                        } else if (status.remaining <= 2) {
+                            statusEl.textContent = `⏳ 等待 ${Math.ceil(minWait)}秒`;
+                        } else if (remaining <= keyCount * 2) {
                             statusEl.className = 'rate-limit-status warning';
-                            statusEl.textContent = `⚡ ${status.remaining}/${status.max}`;
+                            statusEl.textContent = `⚡ ${remaining}/${max} (${keyCount} Keys)`;
                         } else {
                             statusEl.className = 'rate-limit-status';
-                            statusEl.textContent = `✓ ${status.remaining}/${status.max}`;
+                            statusEl.textContent = `✓ ${remaining}/${max} (${keyCount} Keys)`;
                         }
                     }
+                    
+                    // 更新設定頁面的 Key 狀態
+                    updateApiKeysStatus(data.keys);
                 }
             } catch (error) {
                 console.error('無法取得速率限制狀態:', error);
             }
+        }
+        
+        // 更新 API Keys 的狀態顯示
+        function updateApiKeysStatus(keysStatus) {
+            const items = document.querySelectorAll('.api-key-item');
+            const keys = getApiKeys();
+            
+            items.forEach((item, index) => {
+                if (keys[index] && keysStatus) {
+                    // 找到對應的狀態
+                    const keyStatus = keysStatus.find(s => 
+                        s.key_preview === (keys[index].key.substring(0, 10) + '...' + keys[index].key.substring(keys[index].key.length - 4))
+                    );
+                    
+                    if (keyStatus) {
+                        const statusEl = item.querySelector('.api-key-status');
+                        if (statusEl && keys[index].enabled) {
+                            if (keyStatus.remaining === 0) {
+                                statusEl.className = 'api-key-status exhausted';
+                                statusEl.textContent = `等待 ${Math.ceil(keyStatus.wait_time)}秒`;
+                            } else if (keyStatus.remaining <= 2) {
+                                statusEl.className = 'api-key-status limited';
+                                statusEl.textContent = `${keyStatus.remaining}/${keyStatus.max} 可用`;
+                            } else {
+                                statusEl.className = 'api-key-status available';
+                                statusEl.textContent = `${keyStatus.remaining}/${keyStatus.max} 可用`;
+                            }
+                        }
+                    }
+                }
+            });
         }
         
         // 定期更新速率限制狀態
@@ -873,38 +1142,6 @@
         document.addEventListener('DOMContentLoaded', function() {
             updateRateLimitStatus();
         });
-        
-        // 切換 API Key 顯示
-        function toggleApiKeyVisibility() {
-            const input = document.getElementById('custom_api_key');
-            const checkbox = document.getElementById('show_api_key');
-            input.type = checkbox.checked ? 'text' : 'password';
-        }
-        
-        // 儲存 API Key
-        function saveApiKey() {
-            const apiKey = document.getElementById('custom_api_key').value.trim();
-            const status = document.getElementById('api-status');
-            
-            if (apiKey) {
-                localStorage.setItem('custom_gemini_api_key', apiKey);
-                status.className = 'api-status success';
-                status.textContent = '✅ API Key 已儲存！將使用你的自訂 Key。';
-            } else {
-                localStorage.removeItem('custom_gemini_api_key');
-                status.className = 'api-status info';
-                status.textContent = 'ℹ️ 未設定自訂 Key，將使用內建 API Key。';
-            }
-        }
-        
-        // 清除自訂 API Key
-        function clearApiKey() {
-            localStorage.removeItem('custom_gemini_api_key');
-            document.getElementById('custom_api_key').value = '';
-            const status = document.getElementById('api-status');
-            status.className = 'api-status info';
-            status.textContent = 'ℹ️ 已清除自訂 Key，將使用內建 API Key。';
-        }
         
         // 切換分頁
         function switchTab(tab) {

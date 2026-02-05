@@ -439,31 +439,80 @@ def get_quiz():
         'options': options
     })
 
+def get_best_api_key(api_keys_str):
+    """從多個 API Key 中選擇最佳的（可用額度最多的）"""
+    if not api_keys_str:
+        return DEFAULT_GEMINI_API_KEY, None
+    
+    # 支援多個 key（用逗號分隔）
+    keys = [k.strip() for k in api_keys_str.split(',') if k.strip()]
+    
+    if not keys:
+        return DEFAULT_GEMINI_API_KEY, None
+    
+    # 找出可用額度最多的 key
+    best_key = None
+    best_remaining = -1
+    
+    for key in keys:
+        status = rate_limiter.get_status(key)
+        if status['remaining'] > best_remaining:
+            best_remaining = status['remaining']
+            best_key = key
+    
+    # 如果所有 key 都用完了，返回等待時間最短的
+    if best_remaining == 0:
+        min_wait = float('inf')
+        for key in keys:
+            status = rate_limiter.get_status(key)
+            if status['wait_time'] < min_wait:
+                min_wait = status['wait_time']
+                best_key = key
+    
+    return best_key, keys
+
 @app.route('/api/rate-limit-status', methods=['POST'])
 def get_rate_limit_status():
     """取得 API 速率限制狀態"""
     data = request.json
-    custom_api_key = data.get('api_key', '').strip()
-    api_key = custom_api_key if custom_api_key else DEFAULT_GEMINI_API_KEY
+    custom_api_keys = data.get('api_key', '').strip()
     
-    if not api_key:
+    # 支援多個 key
+    if custom_api_keys:
+        keys = [k.strip() for k in custom_api_keys.split(',') if k.strip()]
+    else:
+        keys = [DEFAULT_GEMINI_API_KEY] if DEFAULT_GEMINI_API_KEY else []
+    
+    if not keys:
         return jsonify({'error': '未設定 API Key'}), 400
     
-    # 使用 API key 的 hash 作為識別（不直接暴露 key）
-    key_id = hash(api_key) % 1000000
-    status = rate_limiter.get_status(api_key)
-    status['key_id'] = key_id
+    # 返回所有 key 的狀態
+    all_status = []
+    total_remaining = 0
     
-    return jsonify(status)
+    for key in keys:
+        status = rate_limiter.get_status(key)
+        key_id = hash(key) % 1000000
+        status['key_id'] = key_id
+        status['key_preview'] = key[:10] + '...' + key[-4:] if len(key) > 14 else key
+        all_status.append(status)
+        total_remaining += status['remaining']
+    
+    return jsonify({
+        'keys': all_status,
+        'total_remaining': total_remaining,
+        'total_max': len(keys) * 5,
+        'key_count': len(keys)
+    })
 
 @app.route('/api/generate', methods=['POST'])
 def generate_word_info():
     data = request.json
     japanese_word = data.get('japanese_word', '').strip()
-    custom_api_key = data.get('api_key', '').strip()
+    custom_api_keys = data.get('api_key', '').strip()
     
-    # 使用自訂 API key 或預設的
-    api_key = custom_api_key if custom_api_key else DEFAULT_GEMINI_API_KEY
+    # 選擇最佳的 API key
+    api_key, all_keys = get_best_api_key(custom_api_keys)
     
     if not api_key:
         return jsonify({'error': '請設定 API Key（在設定中填入或聯繫管理員）'}), 400
@@ -474,11 +523,20 @@ def generate_word_info():
     # 檢查速率限制
     wait_time = rate_limiter.get_wait_time(api_key)
     if wait_time > 0:
-        return jsonify({
-            'error': f'API 速率限制中，請等待 {round(wait_time, 1)} 秒',
-            'wait_time': wait_time,
-            'rate_limited': True
-        }), 429
+        # 如果有多個 key，嘗試找其他可用的
+        if all_keys and len(all_keys) > 1:
+            for key in all_keys:
+                if rate_limiter.get_wait_time(key) == 0:
+                    api_key = key
+                    wait_time = 0
+                    break
+        
+        if wait_time > 0:
+            return jsonify({
+                'error': f'所有 API Key 都在冷卻中，請等待 {round(wait_time, 1)} 秒',
+                'wait_time': wait_time,
+                'rate_limited': True
+            }), 429
     
     # 記錄此次呼叫
     rate_limiter.record_call(api_key)
@@ -542,11 +600,15 @@ def generate_batch():
     """批次 AI 生成並儲存單字"""
     data = request.json
     words_text = data.get('words', '').strip()
-    custom_api_key = data.get('api_key', '').strip()
+    custom_api_keys = data.get('api_key', '').strip()
     
-    api_key = custom_api_key if custom_api_key else DEFAULT_GEMINI_API_KEY
+    # 取得所有可用的 API keys
+    if custom_api_keys:
+        all_keys = [k.strip() for k in custom_api_keys.split(',') if k.strip()]
+    else:
+        all_keys = [DEFAULT_GEMINI_API_KEY] if DEFAULT_GEMINI_API_KEY else []
     
-    if not api_key:
+    if not all_keys:
         return jsonify({'error': '請設定 API Key'}), 400
     
     if not words_text:
@@ -564,29 +626,58 @@ def generate_batch():
     
     try:
         genai_module = get_genai_module()
-        genai_module.configure(api_key=api_key)
         
-        # 找到可用的模型（這次呼叫不計入限制，因為只是測試）
-        working_model = None
+        # 使用第一個可用的 key 來測試模型
+        test_key = all_keys[0]
+        genai_module.configure(api_key=test_key)
+        
+        # 找到可用的模型
+        working_model_name = None
         for model_name in MODEL_PRIORITY:
             try:
-                working_model = genai_module.GenerativeModel(model_name)
-                # 測試模型
-                working_model.generate_content("test")
+                model = genai_module.GenerativeModel(model_name)
+                model.generate_content("test")
+                working_model_name = model_name
                 break
             except:
                 continue
         
-        if not working_model:
+        if not working_model_name:
             return jsonify({'error': '無法連接到 AI 模型'}), 500
         
         conn = get_db()
         
         for japanese_word in word_list:
             try:
-                # 等待速率限制
-                wait_time = rate_limiter.wait_and_call(api_key)
-                total_wait_time += wait_time
+                # 選擇最佳的 API key（可用額度最多的）
+                best_key = None
+                best_remaining = -1
+                min_wait = float('inf')
+                
+                for key in all_keys:
+                    status = rate_limiter.get_status(key)
+                    if status['remaining'] > best_remaining:
+                        best_remaining = status['remaining']
+                        best_key = key
+                    if status['wait_time'] < min_wait:
+                        min_wait = status['wait_time']
+                
+                # 如果所有 key 都用完了，等待最短的
+                if best_remaining == 0:
+                    time.sleep(min_wait)
+                    total_wait_time += min_wait
+                    # 重新選擇
+                    for key in all_keys:
+                        if rate_limiter.get_wait_time(key) == 0:
+                            best_key = key
+                            break
+                
+                # 記錄呼叫
+                rate_limiter.record_call(best_key)
+                
+                # 使用選中的 key
+                genai_module.configure(api_key=best_key)
+                working_model = genai_module.GenerativeModel(working_model_name)
                 
                 prompt = f"""請分析這個日文詞彙「{japanese_word}」，並以 JSON 格式回傳以下資訊：
 1. part_of_speech: 詞性（如：名詞、動詞、形容詞、副詞等）
