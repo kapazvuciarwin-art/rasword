@@ -594,7 +594,8 @@
                             <label>常用寫法</label>
                             <select id="common_form">
                                 <option value="kanji">漢字較常用</option>
-                                <option value="kana">假名較常用</option>
+                                <option value="hiragana">平假名較常用</option>
+                                <option value="katakana">片假名較常用</option>
                                 <option value="both">兩者都常用</option>
                             </select>
                         </div>
@@ -626,7 +627,7 @@
                     <h2>批次輸入</h2>
                     <div class="batch-hint">
                         <p>每行一個單字，使用 <code>|</code> 分隔各欄位：</p>
-                        <p><code>日文詞|詞性|假名|漢字|常用(kanji/kana/both)|例句1|例句2|簡短中文|完整中文|日文解釋</code></p>
+                        <p><code>日文詞|詞性|假名|漢字|常用(kanji/hiragana/katakana/both)|例句1|例句2|簡短中文|完整中文|日文解釋</code></p>
                         <p>範例：</p>
                         <p><code>食べる|動詞|たべる|食べる|kanji|ご飯を食べる|朝ご飯を食べました|吃|吃、進食|食べ物を口に入れて飲み込むこと</code></p>
                     </div>
@@ -1029,6 +1030,8 @@
             const commonFormText = {
                 'kanji': '📝 漢字寫法較常用',
                 'kana': '🔤 假名寫法較常用',
+                'hiragana': '🔤 平假名寫法較常用',
+                'katakana': '🔠 片假名寫法較常用',
                 'both': '⚖️ 兩種寫法都常用'
             };
             
@@ -1075,6 +1078,8 @@
                 const commonFormText = {
                     'kanji': '漢字',
                     'kana': '假名',
+                    'hiragana': '平假名',
+                    'katakana': '片假名',
                     'both': '兩者'
                 };
                 

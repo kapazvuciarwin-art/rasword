@@ -207,7 +207,7 @@ def generate_word_info():
 6. jlpt_level: 用日文解釋這個詞的意思（像日日辭典一樣，純日文定義）
 7. kana_form: 這個詞的純假名寫法（平假名或片假名）
 8. kanji_form: 這個詞的漢字寫法（如果有的話，沒有就留空）
-9. common_form: 最常用的寫法是哪種？回答 "kanji"（漢字常用）、"kana"（假名常用）或 "both"（兩者都常用）
+9. common_form: 最常用的寫法是哪種？回答 "kanji"（漢字常用）、"hiragana"（平假名常用）、"katakana"（片假名常用，常見於副詞、擬聲詞、外來語等）或 "both"（兩者都常用）
 
 只回傳純 JSON，不要有其他文字或 markdown 格式。範例格式：
 {{"part_of_speech": "動詞", "sentence1": "ご飯を食べる", "sentence2": "朝ご飯を食べました", "chinese_short": "吃", "chinese_meaning": "吃、進食", "jlpt_level": "食べ物を口に入れて、かんで、飲み込むこと。", "kana_form": "たべる", "kanji_form": "食べる", "common_form": "kanji"}}"""
