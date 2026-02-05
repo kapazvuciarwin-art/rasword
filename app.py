@@ -14,7 +14,7 @@ load_dotenv()
 
 # OpenRouter API 設定
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_DEFAULT_MODEL = "google/gemini-2.0-flash-001"  # 預設模型
+OPENROUTER_DEFAULT_MODEL = "google/gemini-2.0-flash-exp:free"  # 預設免費模型
 
 app = Flask(__name__)
 

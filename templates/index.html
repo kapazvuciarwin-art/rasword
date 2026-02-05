@@ -1036,14 +1036,21 @@
                         <div class="form-group">
                             <label>模型選擇</label>
                             <select id="openrouter_model">
-                                <option value="google/gemini-2.0-flash-001">Google Gemini 2.0 Flash（推薦，便宜）</option>
-                                <option value="google/gemini-2.5-flash-preview">Google Gemini 2.5 Flash Preview</option>
-                                <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-                                <option value="anthropic/claude-3-haiku">Claude 3 Haiku（快速便宜）</option>
-                                <option value="openai/gpt-4o-mini">GPT-4o Mini（便宜）</option>
-                                <option value="openai/gpt-4o">GPT-4o</option>
-                                <option value="meta-llama/llama-3.1-70b-instruct">Llama 3.1 70B</option>
-                                <option value="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B</option>
+                                <optgroup label="🆓 免費模型">
+                                    <option value="google/gemini-2.0-flash-exp:free" selected>Google Gemini 2.0 Flash（免費，推薦）</option>
+                                    <option value="google/gemma-2-9b-it:free">Google Gemma 2 9B（免費）</option>
+                                    <option value="meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B（免費）</option>
+                                    <option value="qwen/qwen-2-7b-instruct:free">Qwen 2 7B（免費）</option>
+                                    <option value="mistralai/mistral-7b-instruct:free">Mistral 7B（免費）</option>
+                                    <option value="microsoft/phi-3-mini-128k-instruct:free">Microsoft Phi-3 Mini（免費）</option>
+                                </optgroup>
+                                <optgroup label="💰 付費模型">
+                                    <option value="google/gemini-2.0-flash-001">Google Gemini 2.0 Flash</option>
+                                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                                    <option value="anthropic/claude-3-haiku">Claude 3 Haiku</option>
+                                    <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+                                    <option value="openai/gpt-4o">GPT-4o</option>
+                                </optgroup>
                             </select>
                         </div>
                     </div>
@@ -1114,7 +1121,7 @@
         }
         
         function getOpenRouterModel() {
-            return localStorage.getItem('openrouter_model') || 'google/gemini-2.0-flash-001';
+            return localStorage.getItem('openrouter_model') || 'google/gemini-2.0-flash-exp:free';
         }
         
         function saveOpenRouterKey() {
