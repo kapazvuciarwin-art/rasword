@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>日文單字練習</title>
+    <style>
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        
+        .tab-btn {
+            flex: 1;
+            padding: 15px 20px;
+            border: none;
+            border-radius: 10px 10px 0 0;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s;
+            background: rgba(255,255,255,0.3);
+            color: white;
+        }
+        
+        .tab-btn.active {
+            background: white;
+            color: #667eea;
+        }
+        
+        .tab-content {
+            display: none;
+            background: white;
+            padding: 30px;
+            border-radius: 0 0 15px 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        
+        .tab-content.active {
+            display: block;
+        }
+        
+        /* 輸入區域樣式 */
+        .input-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .form-group {
+            margin-bottom: 15px;
+        }
+        
+        .form-group label {
+            display: block;
+            margin-bottom: 5px;
+            color: #555;
+            font-weight: bold;
+        }
+        
+        .form-group input, .form-group textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            transition: border-color 0.3s;
+        }
+        
+        .form-group input:focus, .form-group textarea:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        /* 批次輸入區域 */
+        .batch-area {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px dashed #e0e0e0;
+        }
+        
+        .batch-area textarea {
+            height: 200px;
+            font-family: monospace;
+        }
+        
+        .batch-hint {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 14px;
+            color: #666;
+        }
+        
+        .batch-hint code {
+            background: #e9ecef;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+        
+        /* 單字列表 */
+        .word-list {
+            margin-top: 30px;
+        }
+        
+        .word-list h3 {
+            margin-bottom: 15px;
+            color: #333;
+        }
+        
+        .word-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 14px;
+        }
+        
+        .word-table th, .word-table td {
+            padding: 10px;
+            text-align: left;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .word-table th {
+            background: #f8f9fa;
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .word-table tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .delete-btn {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        
+        /* 練習區域樣式 */
+        .quiz-section {
+            text-align: center;
+        }
+        
+        .quiz-word {
+            font-size: 48px;
+            color: #333;
+            margin: 30px 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            border-radius: 15px;
+        }
+        
+        .quiz-info {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        
+        .quiz-info span {
+            background: #e9ecef;
+            padding: 8px 15px;
+            border-radius: 20px;
+            font-size: 14px;
+            color: #555;
+        }
+        
+        .hint-area {
+            margin: 20px 0;
+            min-height: 80px;
+        }
+        
+        .hint-text {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 10px 0;
+            color: #856404;
+            font-size: 18px;
+        }
+        
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .option-btn {
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            background: white;
+            cursor: pointer;
+            font-size: 16px;
+            transition: all 0.3s;
+            text-align: left;
+        }
+        
+        .option-btn:hover {
+            border-color: #667eea;
+            background: #f8f9fa;
+        }
+        
+        .option-btn.correct {
+            border-color: #28a745;
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .option-btn.wrong {
+            border-color: #dc3545;
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .option-btn.disabled {
+            pointer-events: none;
+        }
+        
+        .result-message {
+            font-size: 24px;
+            font-weight: bold;
+            margin: 20px 0;
+            padding: 15px;
+            border-radius: 10px;
+        }
+        
+        .result-message.correct {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .result-message.wrong {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .quiz-controls {
+            margin-top: 20px;
+        }
+        
+        .quiz-controls .btn {
+            margin: 5px;
+        }
+        
+        .no-words-message {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+        
+        .no-words-message p {
+            margin: 10px 0;
+        }
+        
+        /* 響應式設計 */
+        @media (max-width: 600px) {
+            .options-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            .quiz-word {
+                font-size: 36px;
+            }
+            
+            .tabs {
+                flex-direction: column;
+            }
+            
+            .tab-btn {
+                border-radius: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📚 日文單字練習</h1>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('input')">📝 輸入單字</button>
+            <button class="tab-btn" onclick="switchTab('quiz')">🎯 練習題目</button>
+            <button class="tab-btn" onclick="switchTab('list')">📋 單字列表</button>
+        </div>
+        
+        <!-- 輸入單字頁面 -->
+        <div id="input-tab" class="tab-content active">
+            <div class="input-section">
+                <h2>新增單字</h2>
+                <form id="word-form">
+                    <div class="form-group">
+                        <label>日文詞 *</label>
+                        <input type="text" id="japanese_word" required placeholder="例：食べる">
+                    </div>
+                    <div class="form-group">
+                        <label>詞性</label>
+                        <input type="text" id="part_of_speech" placeholder="例：動詞、名詞、形容詞">
+                    </div>
+                    <div class="form-group">
+                        <label>常用短句 1</label>
+                        <input type="text" id="sentence1" placeholder="例：ご飯を食べる">
+                    </div>
+                    <div class="form-group">
+                        <label>常用短句 2</label>
+                        <input type="text" id="sentence2" placeholder="例：朝ご飯を食べました">
+                    </div>
+                    <div class="form-group">
+                        <label>中文解釋 *</label>
+                        <input type="text" id="chinese_meaning" required placeholder="例：吃">
+                    </div>
+                    <div class="form-group">
+                        <label>日文字典等級</label>
+                        <input type="text" id="jlpt_level" placeholder="例：N5、N4、N3、N2、N1">
+                    </div>
+                    <button type="submit" class="btn btn-primary">新增單字</button>
+                </form>
+                
+                <div class="batch-area">
+                    <h2>批次輸入</h2>
+                    <div class="batch-hint">
+                        <p>每行一個單字，使用 <code>|</code> 分隔各欄位：</p>
+                        <p><code>日文詞|詞性|常用短句1|常用短句2|中文解釋|等級</code></p>
+                        <p>範例：</p>
+                        <p><code>食べる|動詞|ご飯を食べる|朝ご飯を食べました|吃|N5</code></p>
+                        <p><code>飲む|動詞|水を飲む|コーヒーを飲みます|喝|N5</code></p>
+                    </div>
+                    <div class="form-group">
+                        <textarea id="batch-input" placeholder="在此貼上批次資料..."></textarea>
+                    </div>
+                    <button class="btn btn-primary" onclick="batchImport()">批次匯入</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 練習題目頁面 -->
+        <div id="quiz-tab" class="tab-content">
+            <div class="quiz-section">
+                <div id="quiz-container">
+                    <!-- 題目會動態載入這裡 -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- 單字列表頁面 -->
+        <div id="list-tab" class="tab-content">
+            <div class="word-list">
+                <h3>已儲存的單字</h3>
+                <div id="word-list-container">
+                    <!-- 單字列表會動態載入這裡 -->
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        let currentQuiz = null;
+        let hintCount = 0;
+        let answered = false;
+        
+        // 切換分頁
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`[onclick="switchTab('${tab}')"]`).classList.add('active');
+            document.getElementById(`${tab}-tab`).classList.add('active');
+            
+            if (tab === 'quiz') {
+                loadQuiz();
+            } else if (tab === 'list') {
+                loadWordList();
+            }
+        }
+        
+        // 新增單字表單
+        document.getElementById('word-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            
+            const data = {
+                japanese_word: document.getElementById('japanese_word').value,
+                part_of_speech: document.getElementById('part_of_speech').value,
+                sentence1: document.getElementById('sentence1').value,
+                sentence2: document.getElementById('sentence2').value,
+                chinese_meaning: document.getElementById('chinese_meaning').value,
+                jlpt_level: document.getElementById('jlpt_level').value
+            };
+            
+            try {
+                const response = await fetch('/api/words', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(data)
+                });
+                
+                if (response.ok) {
+                    alert('單字新增成功！');
+                    e.target.reset();
+                }
+            } catch (error) {
+                alert('新增失敗：' + error.message);
+            }
+        });
+        
+        // 批次匯入
+        async function batchImport() {
+            const text = document.getElementById('batch-input').value.trim();
+            if (!text) {
+                alert('請輸入批次資料');
+                return;
+            }
+            
+            const lines = text.split('\n').filter(line => line.trim());
+            const words = [];
+            
+            for (const line of lines) {
+                const parts = line.split('|');
+                if (parts.length >= 2) {
+                    words.push({
+                        japanese_word: parts[0]?.trim() || '',
+                        part_of_speech: parts[1]?.trim() || '',
+                        sentence1: parts[2]?.trim() || '',
+                        sentence2: parts[3]?.trim() || '',
+                        chinese_meaning: parts[4]?.trim() || '',
+                        jlpt_level: parts[5]?.trim() || ''
+                    });
+                }
+            }
+            
+            if (words.length === 0) {
+                alert('沒有有效的資料可匯入');
+                return;
+            }
+            
+            try {
+                const response = await fetch('/api/words/batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ words })
+                });
+                
+                const result = await response.json();
+                if (response.ok) {
+                    alert(`成功匯入 ${result.count} 個單字！`);
+                    document.getElementById('batch-input').value = '';
+                }
+            } catch (error) {
+                alert('匯入失敗：' + error.message);
+            }
+        }
+        
+        // 載入練習題目
+        async function loadQuiz() {
+            const container = document.getElementById('quiz-container');
+            
+            try {
+                const response = await fetch('/api/quiz');
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    container.innerHTML = `
+                        <div class="no-words-message">
+                            <p>⚠️ ${error.error}</p>
+                            <p>請先到「輸入單字」頁面新增更多單字。</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                currentQuiz = await response.json();
+                hintCount = 0;
+                answered = false;
+                
+                renderQuiz();
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="no-words-message">
+                        <p>❌ 載入失敗：${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // 渲染題目
+        function renderQuiz() {
+            const container = document.getElementById('quiz-container');
+            const q = currentQuiz.question;
+            
+            let optionsHtml = currentQuiz.options.map((opt, index) => `
+                <button class="option-btn" onclick="checkAnswer(${opt.id}, this)">
+                    ${index + 1}. ${opt.chinese_meaning}
+                </button>
+            `).join('');
+            
+            container.innerHTML = `
+                <div class="quiz-word">${q.japanese_word}</div>
+                <div class="quiz-info">
+                    <span>詞性：${q.part_of_speech || '未設定'}</span>
+                    <span>等級：${q.jlpt_level || '未設定'}</span>
+                </div>
+                <div class="hint-area" id="hint-area"></div>
+                <div class="quiz-controls">
+                    <button class="btn btn-warning" onclick="showHint()">💡 提示</button>
+                </div>
+                <div class="options-grid" id="options-grid">
+                    ${optionsHtml}
+                </div>
+                <div id="result-area"></div>
+            `;
+        }
+        
+        // 顯示提示
+        function showHint() {
+            if (answered) return;
+            
+            const hintArea = document.getElementById('hint-area');
+            const q = currentQuiz.question;
+            
+            hintCount++;
+            
+            if (hintCount === 1 && q.sentence1) {
+                hintArea.innerHTML = `<div class="hint-text">💡 短句1：${q.sentence1}</div>`;
+            } else if (hintCount === 2 && q.sentence2) {
+                hintArea.innerHTML += `<div class="hint-text">💡 短句2：${q.sentence2}</div>`;
+            } else if (hintCount === 1 && !q.sentence1 && q.sentence2) {
+                hintArea.innerHTML = `<div class="hint-text">💡 短句2：${q.sentence2}</div>`;
+                hintCount = 2;
+            } else if (hintCount >= 2 || (!q.sentence1 && !q.sentence2)) {
+                alert('沒有更多提示了！');
+            }
+        }
+        
+        // 檢查答案
+        function checkAnswer(selectedId, btn) {
+            if (answered) return;
+            answered = true;
+            
+            const correctId = currentQuiz.question.id;
+            const resultArea = document.getElementById('result-area');
+            const optionsGrid = document.getElementById('options-grid');
+            
+            // 禁用所有選項
+            optionsGrid.querySelectorAll('.option-btn').forEach(b => {
+                b.classList.add('disabled');
+                if (parseInt(b.onclick.toString().match(/checkAnswer\((\d+)/)[1]) === correctId) {
+                    b.classList.add('correct');
+                }
+            });
+            
+            if (selectedId === correctId) {
+                btn.classList.add('correct');
+                resultArea.innerHTML = `
+                    <div class="result-message correct">🎉 答對了！</div>
+                    <button class="btn btn-success" onclick="loadQuiz()">下一題 →</button>
+                `;
+            } else {
+                btn.classList.add('wrong');
+                resultArea.innerHTML = `
+                    <div class="result-message wrong">❌ 答錯了！正確答案是：${currentQuiz.question.correct_meaning}</div>
+                    <button class="btn btn-danger" onclick="retryQuiz()">重新作答</button>
+                `;
+            }
+        }
+        
+        // 重新作答
+        function retryQuiz() {
+            hintCount = 0;
+            answered = false;
+            renderQuiz();
+        }
+        
+        // 載入單字列表
+        async function loadWordList() {
+            const container = document.getElementById('word-list-container');
+            
+            try {
+                const response = await fetch('/api/words');
+                const words = await response.json();
+                
+                if (words.length === 0) {
+                    container.innerHTML = '<p>目前沒有儲存的單字。</p>';
+                    return;
+                }
+                
+                let tableHtml = `
+                    <table class="word-table">
+                        <thead>
+                            <tr>
+                                <th>日文詞</th>
+                                <th>詞性</th>
+                                <th>中文解釋</th>
+                                <th>等級</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                `;
+                
+                for (const word of words) {
+                    tableHtml += `
+                        <tr>
+                            <td>${word.japanese_word}</td>
+                            <td>${word.part_of_speech || '-'}</td>
+                            <td>${word.chinese_meaning}</td>
+                            <td>${word.jlpt_level || '-'}</td>
+                            <td>
+                                <button class="btn btn-danger delete-btn" onclick="deleteWord(${word.id})">刪除</button>
+                            </td>
+                        </tr>
+                    `;
+                }
+                
+                tableHtml += '</tbody></table>';
+                container.innerHTML = tableHtml;
+                
+            } catch (error) {
+                container.innerHTML = `<p>載入失敗：${error.message}</p>`;
+            }
+        }
+        
+        // 刪除單字
+        async function deleteWord(id) {
+            if (!confirm('確定要刪除這個單字嗎？')) return;
+            
+            try {
+                const response = await fetch(`/api/words/${id}`, { method: 'DELETE' });
+                if (response.ok) {
+                    loadWordList();
+                }
+            } catch (error) {
+                alert('刪除失敗：' + error.message);
+            }
+        }
+    </script>
+</body>
+</html>
