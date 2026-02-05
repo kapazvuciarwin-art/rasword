@@ -83,7 +83,7 @@
             font-weight: bold;
         }
         
-        .form-group input, .form-group textarea {
+        .form-group input, .form-group textarea, .form-group select {
             width: 100%;
             padding: 12px;
             border: 2px solid #e0e0e0;
@@ -92,9 +92,19 @@
             transition: border-color 0.3s;
         }
         
-        .form-group input:focus, .form-group textarea:focus {
+        .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
             outline: none;
             border-color: #667eea;
+        }
+        
+        .form-row {
+            display: flex;
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .form-row .form-group {
+            margin-bottom: 0;
         }
         
         .btn {
@@ -135,6 +145,85 @@
         .btn-warning {
             background: #ffc107;
             color: #333;
+        }
+        
+        .btn-ai {
+            background: linear-gradient(135deg, #00b4db 0%, #0083b0 100%);
+            color: white;
+            white-space: nowrap;
+        }
+        
+        .btn-ai:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 180, 219, 0.4);
+        }
+        
+        .btn-ai:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+        
+        /* 設定頁面樣式 */
+        .settings-section {
+            max-width: 600px;
+            margin: 0 auto;
+        }
+        
+        .settings-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+        }
+        
+        .settings-hint {
+            color: #666;
+            font-size: 14px;
+            margin-bottom: 15px;
+        }
+        
+        .settings-hint a {
+            color: #667eea;
+        }
+        
+        .api-status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 8px;
+            display: none;
+        }
+        
+        .api-status.success {
+            display: block;
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .api-status.error {
+            display: block;
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .api-status.info {
+            display: block;
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .model-info {
+            font-size: 12px;
+            color: #888;
+            margin-top: 5px;
+        }
+        
+        .japanese-definition {
+            background: #e8f4f8;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 16px;
+            color: #2c5282;
+            margin: 15px 0;
+            border-left: 4px solid #4299e1;
         }
         
         /* 批次輸入區域 */
@@ -244,6 +333,12 @@
             font-size: 18px;
         }
         
+        .hint-text.hint-dictionary {
+            background: #e8f4f8;
+            color: #2c5282;
+            border-left: 4px solid #4299e1;
+        }
+        
         .options-grid {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -319,6 +414,70 @@
             margin: 10px 0;
         }
         
+        /* 打字測驗樣式 */
+        .typing-input-area {
+            margin: 20px 0;
+        }
+        
+        .typing-input {
+            width: 100%;
+            max-width: 400px;
+            padding: 15px 20px;
+            font-size: 24px;
+            text-align: center;
+            border: 3px solid #667eea;
+            border-radius: 10px;
+            outline: none;
+        }
+        
+        .typing-input:focus {
+            border-color: #764ba2;
+            box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+        }
+        
+        .typing-hint-area {
+            margin: 20px 0;
+            min-height: 60px;
+        }
+        
+        .typing-hint-chars {
+            display: flex;
+            justify-content: center;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+        
+        .hint-char {
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            background: #f8f9fa;
+        }
+        
+        .hint-char.revealed {
+            background: #fff3cd;
+            border-color: #ffc107;
+            color: #856404;
+        }
+        
+        .hint-char.hidden {
+            color: transparent;
+        }
+        
+        .typing-chinese-hint {
+            background: #e8f4f8;
+            padding: 10px 20px;
+            border-radius: 8px;
+            margin: 15px auto;
+            display: inline-block;
+            color: #2c5282;
+        }
+        
         /* 響應式設計 */
         @media (max-width: 600px) {
             .options-grid {
@@ -345,8 +504,10 @@
         
         <div class="tabs">
             <button class="tab-btn active" onclick="switchTab('input')">📝 輸入單字</button>
-            <button class="tab-btn" onclick="switchTab('quiz')">🎯 練習題目</button>
+            <button class="tab-btn" onclick="switchTab('quiz')">🎯 選擇題</button>
+            <button class="tab-btn" onclick="switchTab('typing')">⌨️ 打字測驗</button>
             <button class="tab-btn" onclick="switchTab('list')">📋 單字列表</button>
+            <button class="tab-btn" onclick="switchTab('settings')">⚙️ 設定</button>
         </div>
         
         <!-- 輸入單字頁面 -->
@@ -356,11 +517,32 @@
                 <form id="word-form">
                     <div class="form-group">
                         <label>日文詞 *</label>
-                        <input type="text" id="japanese_word" required placeholder="例：食べる">
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="japanese_word" required placeholder="例：食べる" style="flex: 1;">
+                            <button type="button" class="btn btn-ai" onclick="generateWordInfo()">🤖 AI 生成</button>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>詞性</label>
                         <input type="text" id="part_of_speech" placeholder="例：動詞、名詞、形容詞">
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group" style="flex: 1;">
+                            <label>假名寫法</label>
+                            <input type="text" id="kana_form" placeholder="例：たべる">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>漢字寫法</label>
+                            <input type="text" id="kanji_form" placeholder="例：食べる">
+                        </div>
+                        <div class="form-group" style="flex: 1;">
+                            <label>常用寫法</label>
+                            <select id="common_form">
+                                <option value="kanji">漢字較常用</option>
+                                <option value="kana">假名較常用</option>
+                                <option value="both">兩者都常用</option>
+                            </select>
+                        </div>
                     </div>
                     <div class="form-group">
                         <label>常用短句 1</label>
@@ -371,12 +553,16 @@
                         <input type="text" id="sentence2" placeholder="例：朝ご飯を食べました">
                     </div>
                     <div class="form-group">
-                        <label>中文解釋 *</label>
-                        <input type="text" id="chinese_meaning" required placeholder="例：吃">
+                        <label>中文簡短解釋 *（1-3字）</label>
+                        <input type="text" id="chinese_short" required placeholder="例：吃、喝、貓">
                     </div>
                     <div class="form-group">
-                        <label>日文字典等級</label>
-                        <input type="text" id="jlpt_level" placeholder="例：N5、N4、N3、N2、N1">
+                        <label>中文完整解釋</label>
+                        <textarea id="chinese_meaning" rows="2" placeholder="例：吃、進食"></textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>日文解釋（日日辭典）</label>
+                        <textarea id="jlpt_level" rows="2" placeholder="例：食べ物を口に入れて、かんで、飲み込むこと。"></textarea>
                     </div>
                     <button type="submit" class="btn btn-primary">新增單字</button>
                 </form>
@@ -385,10 +571,9 @@
                     <h2>批次輸入</h2>
                     <div class="batch-hint">
                         <p>每行一個單字，使用 <code>|</code> 分隔各欄位：</p>
-                        <p><code>日文詞|詞性|常用短句1|常用短句2|中文解釋|等級</code></p>
+                        <p><code>日文詞|詞性|假名|漢字|常用(kanji/kana/both)|例句1|例句2|簡短中文|完整中文|日文解釋</code></p>
                         <p>範例：</p>
-                        <p><code>食べる|動詞|ご飯を食べる|朝ご飯を食べました|吃|N5</code></p>
-                        <p><code>飲む|動詞|水を飲む|コーヒーを飲みます|喝|N5</code></p>
+                        <p><code>食べる|動詞|たべる|食べる|kanji|ご飯を食べる|朝ご飯を食べました|吃|吃、進食|食べ物を口に入れて飲み込むこと</code></p>
                     </div>
                     <div class="form-group">
                         <textarea id="batch-input" placeholder="在此貼上批次資料..."></textarea>
@@ -416,12 +601,90 @@
                 </div>
             </div>
         </div>
+        
+        <!-- 打字測驗頁面 -->
+        <div id="typing-tab" class="tab-content">
+            <div class="quiz-section">
+                <div id="typing-container">
+                    <!-- 打字測驗會動態載入這裡 -->
+                </div>
+            </div>
+        </div>
+        
+        <!-- 設定頁面 -->
+        <div id="settings-tab" class="tab-content">
+            <div class="settings-section">
+                <h2>⚙️ API 設定</h2>
+                <p class="settings-hint">如果內建的 Gemini API 無法使用，你可以填入自己的 API Key。</p>
+                <p class="settings-hint">取得 API Key：<a href="https://aistudio.google.com/apikey" target="_blank">https://aistudio.google.com/apikey</a></p>
+                
+                <div class="form-group">
+                    <label>自訂 Gemini API Key</label>
+                    <input type="password" id="custom_api_key" placeholder="留空則使用內建 API Key">
+                </div>
+                <div class="form-group">
+                    <label>
+                        <input type="checkbox" id="show_api_key" onchange="toggleApiKeyVisibility()">
+                        顯示 API Key
+                    </label>
+                </div>
+                <button class="btn btn-primary" onclick="saveApiKey()">💾 儲存設定</button>
+                <button class="btn btn-secondary" onclick="clearApiKey()">🗑️ 清除自訂 Key</button>
+                
+                <div class="api-status" id="api-status"></div>
+            </div>
+        </div>
     </div>
     
     <script>
         let currentQuiz = null;
         let hintCount = 0;
         let answered = false;
+        
+        // 頁面載入時讀取儲存的 API Key
+        document.addEventListener('DOMContentLoaded', function() {
+            const savedKey = localStorage.getItem('custom_gemini_api_key');
+            if (savedKey) {
+                document.getElementById('custom_api_key').value = savedKey;
+            }
+        });
+        
+        // 取得目前使用的 API Key
+        function getApiKey() {
+            return localStorage.getItem('custom_gemini_api_key') || '';
+        }
+        
+        // 切換 API Key 顯示
+        function toggleApiKeyVisibility() {
+            const input = document.getElementById('custom_api_key');
+            const checkbox = document.getElementById('show_api_key');
+            input.type = checkbox.checked ? 'text' : 'password';
+        }
+        
+        // 儲存 API Key
+        function saveApiKey() {
+            const apiKey = document.getElementById('custom_api_key').value.trim();
+            const status = document.getElementById('api-status');
+            
+            if (apiKey) {
+                localStorage.setItem('custom_gemini_api_key', apiKey);
+                status.className = 'api-status success';
+                status.textContent = '✅ API Key 已儲存！將使用你的自訂 Key。';
+            } else {
+                localStorage.removeItem('custom_gemini_api_key');
+                status.className = 'api-status info';
+                status.textContent = 'ℹ️ 未設定自訂 Key，將使用內建 API Key。';
+            }
+        }
+        
+        // 清除自訂 API Key
+        function clearApiKey() {
+            localStorage.removeItem('custom_gemini_api_key');
+            document.getElementById('custom_api_key').value = '';
+            const status = document.getElementById('api-status');
+            status.className = 'api-status info';
+            status.textContent = 'ℹ️ 已清除自訂 Key，將使用內建 API Key。';
+        }
         
         // 切換分頁
         function switchTab(tab) {
@@ -433,6 +696,8 @@
             
             if (tab === 'quiz') {
                 loadQuiz();
+            } else if (tab === 'typing') {
+                loadTypingQuiz();
             } else if (tab === 'list') {
                 loadWordList();
             }
@@ -445,8 +710,12 @@
             const data = {
                 japanese_word: document.getElementById('japanese_word').value,
                 part_of_speech: document.getElementById('part_of_speech').value,
+                kana_form: document.getElementById('kana_form').value,
+                kanji_form: document.getElementById('kanji_form').value,
+                common_form: document.getElementById('common_form').value,
                 sentence1: document.getElementById('sentence1').value,
                 sentence2: document.getElementById('sentence2').value,
+                chinese_short: document.getElementById('chinese_short').value,
                 chinese_meaning: document.getElementById('chinese_meaning').value,
                 jlpt_level: document.getElementById('jlpt_level').value
             };
@@ -461,6 +730,7 @@
                 if (response.ok) {
                     alert('單字新增成功！');
                     e.target.reset();
+                    document.getElementById('common_form').value = 'kanji';
                 }
             } catch (error) {
                 alert('新增失敗：' + error.message);
@@ -484,10 +754,14 @@
                     words.push({
                         japanese_word: parts[0]?.trim() || '',
                         part_of_speech: parts[1]?.trim() || '',
-                        sentence1: parts[2]?.trim() || '',
-                        sentence2: parts[3]?.trim() || '',
-                        chinese_meaning: parts[4]?.trim() || '',
-                        jlpt_level: parts[5]?.trim() || ''
+                        kana_form: parts[2]?.trim() || '',
+                        kanji_form: parts[3]?.trim() || '',
+                        common_form: parts[4]?.trim() || 'kanji',
+                        sentence1: parts[5]?.trim() || '',
+                        sentence2: parts[6]?.trim() || '',
+                        chinese_short: parts[7]?.trim() || '',
+                        chinese_meaning: parts[8]?.trim() || '',
+                        jlpt_level: parts[9]?.trim() || ''
                     });
                 }
             }
@@ -561,11 +835,10 @@
                 <div class="quiz-word">${q.japanese_word}</div>
                 <div class="quiz-info">
                     <span>詞性：${q.part_of_speech || '未設定'}</span>
-                    <span>等級：${q.jlpt_level || '未設定'}</span>
                 </div>
                 <div class="hint-area" id="hint-area"></div>
                 <div class="quiz-controls">
-                    <button class="btn btn-warning" onclick="showHint()">💡 提示</button>
+                    <button class="btn btn-warning" onclick="showHint()">💡 提示（${3 - hintCount} 個）</button>
                 </div>
                 <div class="options-grid" id="options-grid">
                     ${optionsHtml}
@@ -574,7 +847,7 @@
             `;
         }
         
-        // 顯示提示
+        // 顯示提示（三段式：短句1 -> 短句2 -> 日文解釋）
         function showHint() {
             if (answered) return;
             
@@ -583,15 +856,33 @@
             
             hintCount++;
             
-            if (hintCount === 1 && q.sentence1) {
-                hintArea.innerHTML = `<div class="hint-text">💡 短句1：${q.sentence1}</div>`;
-            } else if (hintCount === 2 && q.sentence2) {
-                hintArea.innerHTML += `<div class="hint-text">💡 短句2：${q.sentence2}</div>`;
-            } else if (hintCount === 1 && !q.sentence1 && q.sentence2) {
-                hintArea.innerHTML = `<div class="hint-text">💡 短句2：${q.sentence2}</div>`;
-                hintCount = 2;
-            } else if (hintCount >= 2 || (!q.sentence1 && !q.sentence2)) {
+            if (hintCount === 1) {
+                if (q.sentence1) {
+                    hintArea.innerHTML = `<div class="hint-text">💡 短句1：${q.sentence1}</div>`;
+                } else {
+                    hintCount++;
+                }
+            }
+            
+            if (hintCount === 2) {
+                if (q.sentence2) {
+                    hintArea.innerHTML += `<div class="hint-text">💡 短句2：${q.sentence2}</div>`;
+                } else {
+                    hintCount++;
+                }
+            }
+            
+            if (hintCount === 3) {
+                if (q.jlpt_level) {
+                    hintArea.innerHTML += `<div class="hint-text hint-dictionary">📖 日文解釋：${q.jlpt_level}</div>`;
+                } else {
+                    hintCount++;
+                }
+            }
+            
+            if (hintCount > 3) {
                 alert('沒有更多提示了！');
+                hintCount = 3;
             }
         }
         
@@ -647,14 +938,21 @@
                     return;
                 }
                 
+                const commonFormText = {
+                    'kanji': '漢字',
+                    'kana': '假名',
+                    'both': '兩者'
+                };
+                
                 let tableHtml = `
                     <table class="word-table">
                         <thead>
                             <tr>
                                 <th>日文詞</th>
-                                <th>詞性</th>
-                                <th>中文解釋</th>
-                                <th>等級</th>
+                                <th>假名</th>
+                                <th>漢字</th>
+                                <th>常用</th>
+                                <th>簡短中文</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
@@ -665,9 +963,10 @@
                     tableHtml += `
                         <tr>
                             <td>${word.japanese_word}</td>
-                            <td>${word.part_of_speech || '-'}</td>
-                            <td>${word.chinese_meaning}</td>
-                            <td>${word.jlpt_level || '-'}</td>
+                            <td>${word.kana_form || '-'}</td>
+                            <td>${word.kanji_form || '-'}</td>
+                            <td>${commonFormText[word.common_form] || '-'}</td>
+                            <td>${word.chinese_short || '-'}</td>
                             <td>
                                 <button class="btn btn-danger delete-btn" onclick="deleteWord(${word.id})">刪除</button>
                             </td>
@@ -694,6 +993,225 @@
                 }
             } catch (error) {
                 alert('刪除失敗：' + error.message);
+            }
+        }
+        
+        // ========== 打字測驗功能 ==========
+        let currentTypingQuiz = null;
+        let typingHintCount = 0;
+        let typingAnswered = false;
+        
+        // 載入打字測驗
+        async function loadTypingQuiz() {
+            const container = document.getElementById('typing-container');
+            
+            try {
+                const response = await fetch('/api/typing-quiz');
+                
+                if (!response.ok) {
+                    const error = await response.json();
+                    container.innerHTML = `
+                        <div class="no-words-message">
+                            <p>⚠️ ${error.error}</p>
+                            <p>請先到「輸入單字」頁面新增有假名和漢字寫法的單字。</p>
+                        </div>
+                    `;
+                    return;
+                }
+                
+                currentTypingQuiz = await response.json();
+                typingHintCount = 0;
+                typingAnswered = false;
+                
+                renderTypingQuiz();
+            } catch (error) {
+                container.innerHTML = `
+                    <div class="no-words-message">
+                        <p>❌ 載入失敗：${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+        
+        // 渲染打字測驗
+        function renderTypingQuiz() {
+            const container = document.getElementById('typing-container');
+            const q = currentTypingQuiz.question;
+            const kanaLength = q.kana_form.length;
+            
+            // 建立提示字符格子
+            let hintCharsHtml = '';
+            for (let i = 0; i < kanaLength; i++) {
+                hintCharsHtml += `<div class="hint-char hidden" id="hint-char-${i}">${q.kana_form[i]}</div>`;
+            }
+            
+            container.innerHTML = `
+                <h2>⌨️ 打字測驗</h2>
+                <p style="color: #666; margin-bottom: 20px;">看漢字，打假名</p>
+                <div class="quiz-word">${q.kanji_form}</div>
+                <div class="quiz-info">
+                    <span>詞性：${q.part_of_speech || '未設定'}</span>
+                    ${q.chinese_short ? `<span class="typing-chinese-hint">💡 ${q.chinese_short}</span>` : ''}
+                </div>
+                <div class="typing-hint-area">
+                    <div class="typing-hint-chars" id="typing-hint-chars">
+                        ${hintCharsHtml}
+                    </div>
+                </div>
+                <div class="typing-input-area">
+                    <input type="text" class="typing-input" id="typing-answer" 
+                           placeholder="輸入假名..." 
+                           onkeypress="handleTypingKeypress(event)"
+                           autocomplete="off">
+                </div>
+                <div class="quiz-controls">
+                    <button class="btn btn-warning" onclick="showTypingHint()">💡 提示（顯示下一個字）</button>
+                    <button class="btn btn-primary" onclick="checkTypingAnswer()">確認答案</button>
+                </div>
+                <div id="typing-result-area"></div>
+            `;
+            
+            // 自動聚焦輸入框
+            setTimeout(() => {
+                document.getElementById('typing-answer').focus();
+            }, 100);
+        }
+        
+        // 處理 Enter 鍵
+        function handleTypingKeypress(event) {
+            if (event.key === 'Enter') {
+                checkTypingAnswer();
+            }
+        }
+        
+        // 顯示打字提示（逐字顯示）
+        function showTypingHint() {
+            if (typingAnswered) return;
+            
+            const q = currentTypingQuiz.question;
+            const kanaLength = q.kana_form.length;
+            
+            if (typingHintCount < kanaLength) {
+                const charEl = document.getElementById(`hint-char-${typingHintCount}`);
+                charEl.classList.remove('hidden');
+                charEl.classList.add('revealed');
+                typingHintCount++;
+            }
+            
+            if (typingHintCount >= kanaLength) {
+                alert('已顯示全部答案！');
+            }
+        }
+        
+        // 檢查打字答案
+        async function checkTypingAnswer() {
+            if (typingAnswered) return;
+            
+            const userAnswer = document.getElementById('typing-answer').value.trim();
+            const correctAnswer = currentTypingQuiz.question.kana_form;
+            const resultArea = document.getElementById('typing-result-area');
+            
+            if (!userAnswer) {
+                alert('請輸入答案');
+                return;
+            }
+            
+            typingAnswered = true;
+            
+            // 顯示所有提示字符
+            const kanaLength = correctAnswer.length;
+            for (let i = 0; i < kanaLength; i++) {
+                const charEl = document.getElementById(`hint-char-${i}`);
+                charEl.classList.remove('hidden');
+                charEl.classList.add('revealed');
+            }
+            
+            const isCorrect = userAnswer === correctAnswer;
+            
+            if (isCorrect) {
+                resultArea.innerHTML = `
+                    <div class="result-message correct">🎉 答對了！</div>
+                    <button class="btn btn-success" onclick="loadTypingQuiz()">下一題 →</button>
+                `;
+            } else {
+                resultArea.innerHTML = `
+                    <div class="result-message wrong">
+                        ❌ 答錯了！<br>
+                        你的答案：${userAnswer}<br>
+                        正確答案：${correctAnswer}
+                    </div>
+                    <button class="btn btn-danger" onclick="retryTypingQuiz()">重新作答</button>
+                    <button class="btn btn-secondary" onclick="loadTypingQuiz()">下一題 →</button>
+                `;
+            }
+        }
+        
+        // 重新作答打字測驗
+        function retryTypingQuiz() {
+            typingHintCount = 0;
+            typingAnswered = false;
+            renderTypingQuiz();
+        }
+        
+        // AI 生成單字資訊
+        async function generateWordInfo() {
+            const japaneseWord = document.getElementById('japanese_word').value.trim();
+            
+            if (!japaneseWord) {
+                alert('請先輸入日文詞');
+                return;
+            }
+            
+            const btn = document.querySelector('.btn-ai');
+            const originalText = btn.textContent;
+            btn.textContent = '⏳ 生成中...';
+            btn.disabled = true;
+            
+            // 移除之前的模型資訊
+            const oldModelInfo = document.querySelector('.model-info');
+            if (oldModelInfo) oldModelInfo.remove();
+            
+            try {
+                const response = await fetch('/api/generate', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        japanese_word: japaneseWord,
+                        api_key: getApiKey()
+                    })
+                });
+                
+                const result = await response.json();
+                
+                if (!response.ok) {
+                    alert('生成失敗：' + result.error);
+                    return;
+                }
+                
+                // 填入生成的資料
+                document.getElementById('part_of_speech').value = result.part_of_speech || '';
+                document.getElementById('kana_form').value = result.kana_form || '';
+                document.getElementById('kanji_form').value = result.kanji_form || '';
+                document.getElementById('common_form').value = result.common_form || 'kanji';
+                document.getElementById('sentence1').value = result.sentence1 || '';
+                document.getElementById('sentence2').value = result.sentence2 || '';
+                document.getElementById('chinese_short').value = result.chinese_short || '';
+                document.getElementById('chinese_meaning').value = result.chinese_meaning || '';
+                document.getElementById('jlpt_level').value = result.jlpt_level || '';
+                
+                // 顯示使用的模型
+                if (result.model_used) {
+                    const modelInfo = document.createElement('div');
+                    modelInfo.className = 'model-info';
+                    modelInfo.textContent = `使用模型：${result.model_used}`;
+                    btn.parentNode.appendChild(modelInfo);
+                }
+                
+            } catch (error) {
+                alert('生成失敗：' + error.message);
+            } finally {
+                btn.textContent = originalText;
+                btn.disabled = false;
             }
         }
     </script>
