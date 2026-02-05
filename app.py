@@ -177,18 +177,29 @@ def get_words():
 
 @app.route('/api/words', methods=['POST'])
 def add_word():
-    data = request.json
-    conn = get_db()
-    conn.execute('''
-        INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    ''', (data['japanese_word'], data['part_of_speech'], data['sentence1'], 
-          data['sentence2'], data['chinese_meaning'], data.get('chinese_short', ''), 
-          data['jlpt_level'], data.get('kana_form', ''), data.get('kanji_form', ''),
-          data.get('common_form', 'kanji')))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'success': False, 'error': '無效的請求資料'}), 400
+        
+        japanese_word = data.get('japanese_word', '').strip()
+        if not japanese_word:
+            return jsonify({'success': False, 'error': '日文詞不能為空'}), 400
+        
+        conn = get_db()
+        conn.execute('''
+            INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (japanese_word, data.get('part_of_speech', ''), data.get('sentence1', ''), 
+              data.get('sentence2', ''), data.get('chinese_meaning', ''), data.get('chinese_short', ''), 
+              data.get('jlpt_level', ''), data.get('kana_form', ''), data.get('kanji_form', ''),
+              data.get('common_form', 'kanji')))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        print(f"新增單字錯誤: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/words/batch', methods=['POST'])
 def add_words_batch():
@@ -210,34 +221,41 @@ def add_words_batch():
 @app.route('/api/words/check', methods=['POST'])
 def check_word_exists():
     """檢查單字是否已存在"""
-    data = request.json
-    japanese_word = data.get('japanese_word', '').strip()
-    
-    if not japanese_word:
+    try:
+        data = request.json
+        if not data:
+            return jsonify({'exists': False, 'error': '無效的請求'})
+        
+        japanese_word = data.get('japanese_word', '').strip()
+        
+        if not japanese_word:
+            return jsonify({'exists': False})
+        
+        conn = get_db()
+        # 檢查 japanese_word、kana_form、kanji_form 是否有符合的
+        existing = conn.execute('''
+            SELECT id, japanese_word, kana_form, kanji_form, chinese_short 
+            FROM words 
+            WHERE japanese_word = ? OR kana_form = ? OR kanji_form = ?
+        ''', (japanese_word, japanese_word, japanese_word)).fetchone()
+        conn.close()
+        
+        if existing:
+            return jsonify({
+                'exists': True,
+                'word': {
+                    'id': existing['id'],
+                    'japanese_word': existing['japanese_word'],
+                    'kana_form': existing['kana_form'],
+                    'kanji_form': existing['kanji_form'],
+                    'chinese_short': existing['chinese_short']
+                }
+            })
+        
         return jsonify({'exists': False})
-    
-    conn = get_db()
-    # 檢查 japanese_word、kana_form、kanji_form 是否有符合的
-    existing = conn.execute('''
-        SELECT id, japanese_word, kana_form, kanji_form, chinese_short 
-        FROM words 
-        WHERE japanese_word = ? OR kana_form = ? OR kanji_form = ?
-    ''', (japanese_word, japanese_word, japanese_word)).fetchone()
-    conn.close()
-    
-    if existing:
-        return jsonify({
-            'exists': True,
-            'word': {
-                'id': existing['id'],
-                'japanese_word': existing['japanese_word'],
-                'kana_form': existing['kana_form'],
-                'kanji_form': existing['kanji_form'],
-                'chinese_short': existing['chinese_short']
-            }
-        })
-    
-    return jsonify({'exists': False})
+    except Exception as e:
+        print(f"檢查單字錯誤: {e}")
+        return jsonify({'exists': False, 'error': str(e)}), 500
 
 @app.route('/api/words/check-batch', methods=['POST'])
 def check_words_batch():
