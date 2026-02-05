@@ -14,7 +14,19 @@ load_dotenv()
 
 # OpenRouter API 設定
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_DEFAULT_MODEL = "deepseek/deepseek-r1:free"  # 預設免費模型
+
+# 免費模型優先順序（會自動嘗試直到找到可用的）
+OPENROUTER_FREE_MODELS = [
+    "deepseek/deepseek-r1:free",
+    "deepseek/deepseek-chat:free",
+    "qwen/qwen3-14b:free",
+    "qwen/qwen3-32b:free",
+    "google/gemma-3-27b-it:free",
+    "meta-llama/llama-4-scout:free",
+    "meta-llama/llama-3.2-3b-instruct:free",
+    "mistralai/mistral-7b-instruct:free",
+    "microsoft/phi-3-mini-128k-instruct:free",
+]
 
 app = Flask(__name__)
 
@@ -495,9 +507,7 @@ def get_best_api_key(api_keys_str):
     return best_key, keys
 
 def call_openrouter_api(api_key, prompt, model=None):
-    """呼叫 OpenRouter API"""
-    if not model:
-        model = OPENROUTER_DEFAULT_MODEL
+    """呼叫 OpenRouter API，自動嘗試多個免費模型"""
     
     headers = {
         "Authorization": f"Bearer {api_key}",
@@ -506,34 +516,46 @@ def call_openrouter_api(api_key, prompt, model=None):
         "X-Title": "Rasword"
     }
     
-    data = {
-        "model": model,
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt
+    # 如果指定了模型就只用那個，否則自動嘗試免費模型
+    models_to_try = [model] if model else OPENROUTER_FREE_MODELS
+    
+    last_error = None
+    
+    for try_model in models_to_try:
+        try:
+            print(f"[OpenRouter] 嘗試模型: {try_model}")
+            
+            data = {
+                "model": try_model,
+                "messages": [
+                    {
+                        "role": "user",
+                        "content": prompt
+                    }
+                ],
+                "temperature": 0.7
             }
-        ],
-        "temperature": 0.7
-    }
+            
+            response = requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=60)
+            
+            if response.status_code == 200:
+                result = response.json()
+                if 'error' not in result:
+                    content = result['choices'][0]['message']['content']
+                    print(f"[OpenRouter] 成功使用模型: {try_model}")
+                    return content, try_model
+            
+            # 記錄錯誤但繼續嘗試下一個
+            error_detail = response.text
+            print(f"[OpenRouter] 模型 {try_model} 失敗: {error_detail}")
+            last_error = f"{try_model}: {error_detail}"
+            
+        except Exception as e:
+            print(f"[OpenRouter] 模型 {try_model} 例外: {e}")
+            last_error = f"{try_model}: {str(e)}"
+            continue
     
-    print(f"[OpenRouter] 使用模型: {model}")
-    print(f"[OpenRouter] API Key 前 10 字元: {api_key[:10]}...")
-    
-    response = requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=60)
-    
-    # 更詳細的錯誤處理
-    if response.status_code != 200:
-        error_detail = response.text
-        print(f"[OpenRouter] 錯誤 {response.status_code}: {error_detail}")
-        raise Exception(f"API 錯誤 {response.status_code}: {error_detail}")
-    
-    result = response.json()
-    
-    if 'error' in result:
-        raise Exception(f"API 回應錯誤: {result['error']}")
-    
-    return result['choices'][0]['message']['content']
+    raise Exception(f"所有模型都失敗了。最後錯誤: {last_error}")
 
 def generate_word_prompt(japanese_word):
     """生成單字資訊的 prompt"""
@@ -605,7 +627,8 @@ def generate_word_info():
             return jsonify({'error': '請設定 OpenRouter API Key'}), 400
         
         try:
-            result_text = call_openrouter_api(openrouter_key, prompt, openrouter_model)
+            # 自動嘗試免費模型（不傳 model 參數）
+            result_text, used_model = call_openrouter_api(openrouter_key, prompt)
             
             # 清理可能的 markdown 格式
             if result_text.startswith('```'):
@@ -614,7 +637,7 @@ def generate_word_info():
             
             result = json.loads(result_text)
             result['japanese_word'] = japanese_word
-            result['model_used'] = f"OpenRouter: {openrouter_model or OPENROUTER_DEFAULT_MODEL}"
+            result['model_used'] = f"OpenRouter: {used_model}"
             result.setdefault('kana_form', '')
             result.setdefault('kanji_form', '')
             result.setdefault('common_form', 'kanji')
@@ -623,8 +646,6 @@ def generate_word_info():
             
         except json.JSONDecodeError as e:
             return jsonify({'error': f'AI 回應格式錯誤: {str(e)}', 'raw': result_text}), 500
-        except requests.exceptions.HTTPError as e:
-            return jsonify({'error': f'OpenRouter API 錯誤: {str(e)}'}), 500
         except Exception as e:
             return jsonify({'error': f'生成失敗: {str(e)}'}), 500
     
@@ -724,11 +745,13 @@ def generate_batch():
             return jsonify({'error': '請設定 OpenRouter API Key'}), 400
         
         conn = get_db()
+        used_model = None
         
         for japanese_word in word_list:
             try:
                 prompt = generate_word_prompt(japanese_word)
-                result_text = call_openrouter_api(openrouter_key, prompt, openrouter_model)
+                # 自動嘗試免費模型
+                result_text, used_model = call_openrouter_api(openrouter_key, prompt)
                 
                 # 清理可能的 markdown 格式
                 if result_text.startswith('```'):
@@ -764,7 +787,8 @@ def generate_batch():
             'failed': len(errors),
             'results': results,
             'errors': errors,
-            'total_wait_time': 0
+            'total_wait_time': 0,
+            'model_used': used_model
         })
     
     # 使用 Gemini API（原有邏輯）
