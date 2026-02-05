@@ -315,6 +315,34 @@
             padding: 0;
         }
         
+        .batch-result-warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+        }
+        
+        .batch-result-warning ul {
+            margin: 10px 0 0 20px;
+            padding: 0;
+        }
+        
+        .duplicate-warning {
+            background: #fff3cd;
+            color: #856404;
+            padding: 12px 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 14px;
+        }
+        
+        .btn-small {
+            padding: 5px 12px;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+        
         /* 單字列表 */
         .word-list {
             margin-top: 30px;
@@ -875,8 +903,8 @@
                 return;
             }
             
-            const wordCount = text.split('\n').filter(w => w.trim()).length;
-            if (wordCount === 0) {
+            const allWords = text.split('\n').filter(w => w.trim());
+            if (allWords.length === 0) {
                 alert('沒有有效的詞彙');
                 return;
             }
@@ -887,20 +915,51 @@
             const progressFill = document.getElementById('progress-fill');
             const resultDiv = document.getElementById('batch-ai-result');
             
-            // 顯示進度
+            // 顯示進度 - 檢查重複
             btn.disabled = true;
-            btn.textContent = '⏳ 生成中...';
+            btn.textContent = '⏳ 檢查中...';
             progressDiv.style.display = 'block';
-            progressText.textContent = `正在處理 ${wordCount} 個詞彙，請稍候...（這可能需要一些時間）`;
-            progressFill.style.width = '10%';
+            progressText.textContent = `正在檢查 ${allWords.length} 個詞彙是否重複...`;
+            progressFill.style.width = '5%';
             resultDiv.innerHTML = '';
+            
+            // 先檢查重複
+            const checkResult = await checkBatchDuplicates(allWords);
+            const duplicates = checkResult.results.filter(r => r.exists);
+            const newWords = checkResult.results.filter(r => !r.exists).map(r => r.word);
+            
+            // 如果有重複，顯示警告
+            if (duplicates.length > 0) {
+                let duplicateHtml = `<div class="batch-result-warning">
+                    ⚠️ 以下 ${duplicates.length} 個詞彙已存在（將跳過）：
+                    <ul>`;
+                for (const dup of duplicates) {
+                    duplicateHtml += `<li><strong>${dup.word}</strong> = ${dup.existing.chinese_short || '無解釋'}</li>`;
+                }
+                duplicateHtml += `</ul></div>`;
+                resultDiv.innerHTML = duplicateHtml;
+            }
+            
+            // 如果沒有新詞彙要處理
+            if (newWords.length === 0) {
+                btn.disabled = false;
+                btn.textContent = '🤖 批次 AI 生成並儲存';
+                progressDiv.style.display = 'none';
+                resultDiv.innerHTML += `<div class="batch-result-error">❌ 所有詞彙都已存在，沒有需要生成的</div>`;
+                return;
+            }
+            
+            // 繼續生成新詞彙
+            btn.textContent = '⏳ 生成中...';
+            progressText.textContent = `正在處理 ${newWords.length} 個新詞彙，請稍候...（跳過 ${duplicates.length} 個重複）`;
+            progressFill.style.width = '10%';
             
             try {
                 const response = await fetch('/api/generate-batch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        words: text,
+                        words: newWords.join('\n'),
                         api_key: getApiKey()
                     })
                 });
@@ -910,13 +969,13 @@
                 const result = await response.json();
                 
                 if (!response.ok) {
-                    resultDiv.innerHTML = `<div class="batch-result-error">❌ ${result.error}</div>`;
+                    resultDiv.innerHTML += `<div class="batch-result-error">❌ ${result.error}</div>`;
                     return;
                 }
                 
                 // 顯示結果
                 let html = `<div class="batch-result-success">
-                    ✅ 完成！共 ${result.total} 個詞彙，成功 ${result.completed} 個，失敗 ${result.failed} 個
+                    ✅ 完成！新增 ${result.completed} 個，失敗 ${result.failed} 個，跳過重複 ${duplicates.length} 個
                 </div>`;
                 
                 if (result.errors && result.errors.length > 0) {
@@ -929,7 +988,7 @@
                     html += `</ul></div>`;
                 }
                 
-                resultDiv.innerHTML = html;
+                resultDiv.innerHTML += html;
                 
                 // 清空輸入
                 if (result.completed > 0) {
@@ -937,7 +996,7 @@
                 }
                 
             } catch (error) {
-                resultDiv.innerHTML = `<div class="batch-result-error">❌ 生成失敗：${error.message}</div>`;
+                resultDiv.innerHTML += `<div class="batch-result-error">❌ 生成失敗：${error.message}</div>`;
             } finally {
                 btn.disabled = false;
                 btn.textContent = '🤖 批次 AI 生成並儲存';
@@ -1487,12 +1546,62 @@
             
             const btn = document.querySelector('.btn-ai');
             const originalText = btn.textContent;
+            btn.textContent = '⏳ 檢查中...';
+            btn.disabled = true;
+            
+            // 移除之前的模型資訊和警告
+            const oldModelInfo = document.querySelector('.model-info');
+            if (oldModelInfo) oldModelInfo.remove();
+            const oldWarning = document.querySelector('.duplicate-warning');
+            if (oldWarning) oldWarning.remove();
+            
+            // 先檢查是否已存在
+            try {
+                const checkResponse = await fetch('/api/words/check', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ japanese_word: japaneseWord })
+                });
+                
+                const checkResult = await checkResponse.json();
+                
+                if (checkResult.exists) {
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                    
+                    const warning = document.createElement('div');
+                    warning.className = 'duplicate-warning';
+                    warning.innerHTML = `
+                        ⚠️ 此單字已存在！<br>
+                        <strong>${checkResult.word.japanese_word}</strong>
+                        ${checkResult.word.kana_form ? `（${checkResult.word.kana_form}）` : ''}
+                        = ${checkResult.word.chinese_short || '無解釋'}<br>
+                        <button class="btn btn-secondary btn-small" onclick="this.parentElement.remove(); generateWordInfoForce()">仍要生成</button>
+                    `;
+                    btn.parentNode.appendChild(warning);
+                    return;
+                }
+            } catch (error) {
+                console.error('檢查失敗:', error);
+            }
+            
+            btn.textContent = '⏳ 生成中...';
+            await doGenerateWordInfo(japaneseWord, btn, originalText);
+        }
+        
+        // 強制生成（忽略重複警告）
+        async function generateWordInfoForce() {
+            const japaneseWord = document.getElementById('japanese_word').value.trim();
+            const btn = document.querySelector('.btn-ai');
+            const originalText = btn.textContent;
             btn.textContent = '⏳ 生成中...';
             btn.disabled = true;
             
-            // 移除之前的模型資訊
-            const oldModelInfo = document.querySelector('.model-info');
-            if (oldModelInfo) oldModelInfo.remove();
+            await doGenerateWordInfo(japaneseWord, btn, originalText);
+        }
+        
+        // 實際執行 AI 生成
+        async function doGenerateWordInfo(japaneseWord, btn, originalText) {
             
             try {
                 const response = await fetch('/api/generate', {
@@ -1535,6 +1644,21 @@
             } finally {
                 btn.textContent = originalText;
                 btn.disabled = false;
+            }
+        }
+        
+        // 檢查批次單字是否重複
+        async function checkBatchDuplicates(words) {
+            try {
+                const response = await fetch('/api/words/check-batch', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ words: words })
+                });
+                return await response.json();
+            } catch (error) {
+                console.error('批次檢查失敗:', error);
+                return { results: [] };
             }
         }
     </script>

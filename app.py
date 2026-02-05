@@ -143,6 +143,79 @@ def add_words_batch():
     conn.close()
     return jsonify({'success': True, 'count': len(words)})
 
+@app.route('/api/words/check', methods=['POST'])
+def check_word_exists():
+    """檢查單字是否已存在"""
+    data = request.json
+    japanese_word = data.get('japanese_word', '').strip()
+    
+    if not japanese_word:
+        return jsonify({'exists': False})
+    
+    conn = get_db()
+    # 檢查 japanese_word、kana_form、kanji_form 是否有符合的
+    existing = conn.execute('''
+        SELECT id, japanese_word, kana_form, kanji_form, chinese_short 
+        FROM words 
+        WHERE japanese_word = ? OR kana_form = ? OR kanji_form = ?
+    ''', (japanese_word, japanese_word, japanese_word)).fetchone()
+    conn.close()
+    
+    if existing:
+        return jsonify({
+            'exists': True,
+            'word': {
+                'id': existing['id'],
+                'japanese_word': existing['japanese_word'],
+                'kana_form': existing['kana_form'],
+                'kanji_form': existing['kanji_form'],
+                'chinese_short': existing['chinese_short']
+            }
+        })
+    
+    return jsonify({'exists': False})
+
+@app.route('/api/words/check-batch', methods=['POST'])
+def check_words_batch():
+    """批次檢查單字是否已存在"""
+    data = request.json
+    words = data.get('words', [])
+    
+    if not words:
+        return jsonify({'results': []})
+    
+    conn = get_db()
+    results = []
+    
+    for word in words:
+        word = word.strip()
+        if not word:
+            continue
+        
+        existing = conn.execute('''
+            SELECT id, japanese_word, kana_form, kanji_form, chinese_short 
+            FROM words 
+            WHERE japanese_word = ? OR kana_form = ? OR kanji_form = ?
+        ''', (word, word, word)).fetchone()
+        
+        if existing:
+            results.append({
+                'word': word,
+                'exists': True,
+                'existing': {
+                    'japanese_word': existing['japanese_word'],
+                    'chinese_short': existing['chinese_short']
+                }
+            })
+        else:
+            results.append({
+                'word': word,
+                'exists': False
+            })
+    
+    conn.close()
+    return jsonify({'results': results})
+
 @app.route('/api/words/<int:word_id>', methods=['DELETE'])
 def delete_word(word_id):
     conn = get_db()
