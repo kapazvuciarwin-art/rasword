@@ -3,12 +3,76 @@ import sqlite3
 import random
 import os
 import json
+import time
+import threading
 from datetime import datetime, timedelta
+from collections import defaultdict
 from dotenv import load_dotenv
 
 load_dotenv()
 
 app = Flask(__name__)
+
+# API 速率限制器
+class RateLimiter:
+    def __init__(self, max_calls=5, period=59):
+        self.max_calls = max_calls
+        self.period = period  # 秒
+        self.calls = defaultdict(list)  # api_key -> [timestamps]
+        self.lock = threading.Lock()
+    
+    def _clean_old_calls(self, api_key):
+        """清除過期的呼叫記錄"""
+        now = time.time()
+        self.calls[api_key] = [t for t in self.calls[api_key] if now - t < self.period]
+    
+    def get_wait_time(self, api_key):
+        """取得需要等待的時間（秒），0 表示可以立即呼叫"""
+        with self.lock:
+            self._clean_old_calls(api_key)
+            
+            if len(self.calls[api_key]) < self.max_calls:
+                return 0
+            
+            # 計算需要等待多久
+            oldest_call = min(self.calls[api_key])
+            wait_time = self.period - (time.time() - oldest_call)
+            return max(0, wait_time)
+    
+    def can_call(self, api_key):
+        """檢查是否可以呼叫"""
+        return self.get_wait_time(api_key) == 0
+    
+    def record_call(self, api_key):
+        """記錄一次呼叫"""
+        with self.lock:
+            self.calls[api_key].append(time.time())
+    
+    def wait_and_call(self, api_key):
+        """等待直到可以呼叫，然後記錄"""
+        wait_time = self.get_wait_time(api_key)
+        if wait_time > 0:
+            time.sleep(wait_time)
+        self.record_call(api_key)
+        return wait_time
+    
+    def get_status(self, api_key):
+        """取得目前狀態"""
+        with self.lock:
+            self._clean_old_calls(api_key)
+            used = len(self.calls[api_key])
+            remaining = self.max_calls - used
+            wait_time = self.get_wait_time(api_key)
+            return {
+                'used': used,
+                'remaining': remaining,
+                'max': self.max_calls,
+                'period': self.period,
+                'wait_time': round(wait_time, 1)
+            }
+
+# 全域速率限制器
+rate_limiter = RateLimiter(max_calls=5, period=59)
 
 # Gemini API 設定
 DEFAULT_GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
@@ -375,6 +439,23 @@ def get_quiz():
         'options': options
     })
 
+@app.route('/api/rate-limit-status', methods=['POST'])
+def get_rate_limit_status():
+    """取得 API 速率限制狀態"""
+    data = request.json
+    custom_api_key = data.get('api_key', '').strip()
+    api_key = custom_api_key if custom_api_key else DEFAULT_GEMINI_API_KEY
+    
+    if not api_key:
+        return jsonify({'error': '未設定 API Key'}), 400
+    
+    # 使用 API key 的 hash 作為識別（不直接暴露 key）
+    key_id = hash(api_key) % 1000000
+    status = rate_limiter.get_status(api_key)
+    status['key_id'] = key_id
+    
+    return jsonify(status)
+
 @app.route('/api/generate', methods=['POST'])
 def generate_word_info():
     data = request.json
@@ -389,6 +470,18 @@ def generate_word_info():
     
     if not japanese_word:
         return jsonify({'error': '請輸入日文詞'}), 400
+    
+    # 檢查速率限制
+    wait_time = rate_limiter.get_wait_time(api_key)
+    if wait_time > 0:
+        return jsonify({
+            'error': f'API 速率限制中，請等待 {round(wait_time, 1)} 秒',
+            'wait_time': wait_time,
+            'rate_limited': True
+        }), 429
+    
+    # 記錄此次呼叫
+    rate_limiter.record_call(api_key)
     
     try:
         genai_module = get_genai_module()
@@ -467,12 +560,13 @@ def generate_batch():
     
     results = []
     errors = []
+    total_wait_time = 0
     
     try:
         genai_module = get_genai_module()
         genai_module.configure(api_key=api_key)
         
-        # 找到可用的模型
+        # 找到可用的模型（這次呼叫不計入限制，因為只是測試）
         working_model = None
         for model_name in MODEL_PRIORITY:
             try:
@@ -490,6 +584,10 @@ def generate_batch():
         
         for japanese_word in word_list:
             try:
+                # 等待速率限制
+                wait_time = rate_limiter.wait_and_call(api_key)
+                total_wait_time += wait_time
+                
                 prompt = f"""請分析這個日文詞彙「{japanese_word}」，並以 JSON 格式回傳以下資訊：
 1. part_of_speech: 詞性（如：名詞、動詞、形容詞、副詞等）
 2. sentence1: 一個常用的日文例句（使用這個詞）
@@ -539,7 +637,8 @@ def generate_batch():
             'completed': len(results),
             'failed': len(errors),
             'results': results,
-            'errors': errors
+            'errors': errors,
+            'total_wait_time': round(total_wait_time, 1)
         })
         
     except Exception as e:

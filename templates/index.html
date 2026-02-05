@@ -343,6 +343,29 @@
             margin-top: 8px;
         }
         
+        .rate-limit-status {
+            font-size: 12px;
+            color: #666;
+            margin-left: 10px;
+        }
+        
+        .rate-limit-status.warning {
+            color: #856404;
+        }
+        
+        .rate-limit-status.danger {
+            color: #dc3545;
+        }
+        
+        .rate-limit-info {
+            background: #e9ecef;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-top: 10px;
+            font-size: 13px;
+            color: #555;
+        }
+        
         /* 單字列表 */
         .word-list {
             margin-top: 30px;
@@ -661,6 +684,7 @@
                         <div style="display: flex; gap: 10px;">
                             <input type="text" id="japanese_word" required placeholder="例：食べる" style="flex: 1;">
                             <button type="button" class="btn btn-ai" onclick="generateWordInfo()">🤖 AI 生成</button>
+                            <span class="rate-limit-status" id="rate-limit-status"></span>
                         </div>
                     </div>
                     <div class="form-group">
@@ -812,6 +836,44 @@
             return localStorage.getItem('custom_gemini_api_key') || '';
         }
         
+        // 更新速率限制狀態顯示
+        async function updateRateLimitStatus() {
+            try {
+                const response = await fetch('/api/rate-limit-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ api_key: getApiKey() })
+                });
+                
+                if (response.ok) {
+                    const status = await response.json();
+                    const statusEl = document.getElementById('rate-limit-status');
+                    if (statusEl) {
+                        if (status.remaining === 0) {
+                            statusEl.className = 'rate-limit-status danger';
+                            statusEl.textContent = `⏳ 等待 ${status.wait_time}秒`;
+                        } else if (status.remaining <= 2) {
+                            statusEl.className = 'rate-limit-status warning';
+                            statusEl.textContent = `⚡ ${status.remaining}/${status.max}`;
+                        } else {
+                            statusEl.className = 'rate-limit-status';
+                            statusEl.textContent = `✓ ${status.remaining}/${status.max}`;
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('無法取得速率限制狀態:', error);
+            }
+        }
+        
+        // 定期更新速率限制狀態
+        setInterval(updateRateLimitStatus, 5000);
+        
+        // 頁面載入時更新
+        document.addEventListener('DOMContentLoaded', function() {
+            updateRateLimitStatus();
+        });
+        
         // 切換 API Key 顯示
         function toggleApiKeyVisibility() {
             const input = document.getElementById('custom_api_key');
@@ -951,7 +1013,9 @@
             
             // 繼續生成新詞彙
             btn.textContent = '⏳ 生成中...';
-            progressText.textContent = `正在處理 ${newWords.length} 個新詞彙，請稍候...（跳過 ${duplicates.length} 個重複）`;
+            const estimatedTime = Math.ceil(newWords.length / 5) * 59;  // 預估時間
+            progressText.textContent = `正在處理 ${newWords.length} 個新詞彙（跳過 ${duplicates.length} 個重複）`;
+            progressText.innerHTML += `<br><small>⏱️ 速率限制：每 59 秒最多 5 個，預估需要約 ${estimatedTime} 秒</small>`;
             progressFill.style.width = '10%';
             
             try {
@@ -974,9 +1038,13 @@
                 }
                 
                 // 顯示結果
+                let waitInfo = result.total_wait_time > 0 ? `（等待了 ${result.total_wait_time} 秒）` : '';
                 let html = `<div class="batch-result-success">
-                    ✅ 完成！新增 ${result.completed} 個，失敗 ${result.failed} 個，跳過重複 ${duplicates.length} 個
+                    ✅ 完成！新增 ${result.completed} 個，失敗 ${result.failed} 個，跳過重複 ${duplicates.length} 個 ${waitInfo}
                 </div>`;
+                
+                // 更新速率限制狀態
+                updateRateLimitStatus();
                 
                 if (result.errors && result.errors.length > 0) {
                     html += `<div class="batch-result-error">
@@ -1616,9 +1684,24 @@
                 const result = await response.json();
                 
                 if (!response.ok) {
+                    if (result.rate_limited) {
+                        // 速率限制，等待後自動重試
+                        const waitTime = Math.ceil(result.wait_time);
+                        btn.textContent = `⏳ 等待 ${waitTime}秒...`;
+                        
+                        await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+                        
+                        // 重試
+                        btn.textContent = '⏳ 生成中...';
+                        await doGenerateWordInfo(japaneseWord, btn, originalText);
+                        return;
+                    }
                     alert('生成失敗：' + result.error);
                     return;
                 }
+                
+                // 更新速率限制狀態
+                updateRateLimitStatus();
                 
                 // 填入生成的資料
                 document.getElementById('part_of_speech').value = result.part_of_speech || '';
