@@ -5,11 +5,16 @@ import os
 import json
 import time
 import threading
+import requests
 from datetime import datetime, timedelta
 from collections import defaultdict
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# OpenRouter API 設定
+OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
+OPENROUTER_DEFAULT_MODEL = "google/gemini-2.0-flash-001"  # 預設模型
 
 app = Flask(__name__)
 
@@ -489,6 +494,51 @@ def get_best_api_key(api_keys_str):
     
     return best_key, keys
 
+def call_openrouter_api(api_key, prompt, model=None):
+    """呼叫 OpenRouter API"""
+    if not model:
+        model = OPENROUTER_DEFAULT_MODEL
+    
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+        "HTTP-Referer": "https://rasword.local",  # 可選，用於統計
+        "X-Title": "Rasword Japanese Learning"  # 可選，用於統計
+    }
+    
+    data = {
+        "model": model,
+        "messages": [
+            {
+                "role": "user",
+                "content": prompt
+            }
+        ],
+        "temperature": 0.7
+    }
+    
+    response = requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=60)
+    response.raise_for_status()
+    
+    result = response.json()
+    return result['choices'][0]['message']['content']
+
+def generate_word_prompt(japanese_word):
+    """生成單字資訊的 prompt"""
+    return f"""請分析這個日文詞彙「{japanese_word}」，並以 JSON 格式回傳以下資訊：
+1. part_of_speech: 詞性（如：名詞、動詞、形容詞、副詞等）
+2. sentence1: 一個常用的日文例句（使用這個詞）
+3. sentence2: 另一個常用的日文例句（使用這個詞）
+4. chinese_short: 繁體中文簡短解釋（1-3個字，只寫最核心的意思，例如：吃、喝、貓、漂亮）
+5. chinese_meaning: 繁體中文完整解釋
+6. jlpt_level: 用日文解釋這個詞的意思（像日日辭典一樣，純日文定義）
+7. kana_form: 這個詞的純假名寫法（平假名或片假名）
+8. kanji_form: 這個詞的漢字寫法（如果有的話，沒有就留空）
+9. common_form: 最常用的寫法是哪種？回答 "kanji"（漢字常用）、"hiragana"（平假名常用）、"katakana"（片假名常用，常見於副詞、擬聲詞、外來語等）或 "both"（兩者都常用）
+
+只回傳純 JSON，不要有其他文字或 markdown 格式。範例格式：
+{{"part_of_speech": "動詞", "sentence1": "ご飯を食べる", "sentence2": "朝ご飯を食べました", "chinese_short": "吃", "chinese_meaning": "吃、進食", "jlpt_level": "食べ物を口に入れて、かんで、飲み込むこと。", "kana_form": "たべる", "kanji_form": "食べる", "common_form": "kanji"}}"""
+
 @app.route('/api/rate-limit-status', methods=['POST'])
 def get_rate_limit_status():
     """取得 API 速率限制狀態"""
@@ -528,15 +578,49 @@ def generate_word_info():
     data = request.json
     japanese_word = data.get('japanese_word', '').strip()
     custom_api_keys = data.get('api_key', '').strip()
+    api_provider = data.get('api_provider', 'gemini')  # 'gemini' 或 'openrouter'
+    openrouter_key = data.get('openrouter_key', '').strip()
+    openrouter_model = data.get('openrouter_model', '').strip()
     
-    # 選擇最佳的 API key
+    if not japanese_word:
+        return jsonify({'error': '請輸入日文詞'}), 400
+    
+    prompt = generate_word_prompt(japanese_word)
+    
+    # 使用 OpenRouter API
+    if api_provider == 'openrouter':
+        if not openrouter_key:
+            return jsonify({'error': '請設定 OpenRouter API Key'}), 400
+        
+        try:
+            result_text = call_openrouter_api(openrouter_key, prompt, openrouter_model)
+            
+            # 清理可能的 markdown 格式
+            if result_text.startswith('```'):
+                lines = result_text.split('\n')
+                result_text = '\n'.join(lines[1:-1])
+            
+            result = json.loads(result_text)
+            result['japanese_word'] = japanese_word
+            result['model_used'] = f"OpenRouter: {openrouter_model or OPENROUTER_DEFAULT_MODEL}"
+            result.setdefault('kana_form', '')
+            result.setdefault('kanji_form', '')
+            result.setdefault('common_form', 'kanji')
+            
+            return jsonify(result)
+            
+        except json.JSONDecodeError as e:
+            return jsonify({'error': f'AI 回應格式錯誤: {str(e)}', 'raw': result_text}), 500
+        except requests.exceptions.HTTPError as e:
+            return jsonify({'error': f'OpenRouter API 錯誤: {str(e)}'}), 500
+        except Exception as e:
+            return jsonify({'error': f'生成失敗: {str(e)}'}), 500
+    
+    # 使用 Gemini API（原有邏輯）
     api_key, all_keys = get_best_api_key(custom_api_keys)
     
     if not api_key:
         return jsonify({'error': '請設定 API Key（在設定中填入或聯繫管理員）'}), 400
-    
-    if not japanese_word:
-        return jsonify({'error': '請輸入日文詞'}), 400
     
     # 檢查速率限制
     wait_time = rate_limiter.get_wait_time(api_key)
@@ -569,20 +653,6 @@ def generate_word_info():
             try:
                 model = genai_module.GenerativeModel(model_name)
                 
-                prompt = f"""請分析這個日文詞彙「{japanese_word}」，並以 JSON 格式回傳以下資訊：
-1. part_of_speech: 詞性（如：名詞、動詞、形容詞、副詞等）
-2. sentence1: 一個常用的日文例句（使用這個詞）
-3. sentence2: 另一個常用的日文例句（使用這個詞）
-4. chinese_short: 繁體中文簡短解釋（1-3個字，只寫最核心的意思，例如：吃、喝、貓、漂亮）
-5. chinese_meaning: 繁體中文完整解釋
-6. jlpt_level: 用日文解釋這個詞的意思（像日日辭典一樣，純日文定義）
-7. kana_form: 這個詞的純假名寫法（平假名或片假名）
-8. kanji_form: 這個詞的漢字寫法（如果有的話，沒有就留空）
-9. common_form: 最常用的寫法是哪種？回答 "kanji"（漢字常用）、"hiragana"（平假名常用）、"katakana"（片假名常用，常見於副詞、擬聲詞、外來語等）或 "both"（兩者都常用）
-
-只回傳純 JSON，不要有其他文字或 markdown 格式。範例格式：
-{{"part_of_speech": "動詞", "sentence1": "ご飯を食べる", "sentence2": "朝ご飯を食べました", "chinese_short": "吃", "chinese_meaning": "吃、進食", "jlpt_level": "食べ物を口に入れて、かんで、飲み込むこと。", "kana_form": "たべる", "kanji_form": "食べる", "common_form": "kanji"}}"""
-
                 response = model.generate_content(prompt)
                 result_text = response.text.strip()
                 
@@ -619,15 +689,9 @@ def generate_batch():
     data = request.json
     words_text = data.get('words', '').strip()
     custom_api_keys = data.get('api_key', '').strip()
-    
-    # 取得所有可用的 API keys
-    if custom_api_keys:
-        all_keys = [k.strip() for k in custom_api_keys.split(',') if k.strip()]
-    else:
-        all_keys = [DEFAULT_GEMINI_API_KEY] if DEFAULT_GEMINI_API_KEY else []
-    
-    if not all_keys:
-        return jsonify({'error': '請設定 API Key'}), 400
+    api_provider = data.get('api_provider', 'gemini')  # 'gemini' 或 'openrouter'
+    openrouter_key = data.get('openrouter_key', '').strip()
+    openrouter_model = data.get('openrouter_model', '').strip()
     
     if not words_text:
         return jsonify({'error': '請輸入要生成的詞彙'}), 400
@@ -641,6 +705,64 @@ def generate_batch():
     results = []
     errors = []
     total_wait_time = 0
+    
+    # 使用 OpenRouter API
+    if api_provider == 'openrouter':
+        if not openrouter_key:
+            return jsonify({'error': '請設定 OpenRouter API Key'}), 400
+        
+        conn = get_db()
+        
+        for japanese_word in word_list:
+            try:
+                prompt = generate_word_prompt(japanese_word)
+                result_text = call_openrouter_api(openrouter_key, prompt, openrouter_model)
+                
+                # 清理可能的 markdown 格式
+                if result_text.startswith('```'):
+                    lines = result_text.split('\n')
+                    result_text = '\n'.join(lines[1:-1])
+                
+                result = json.loads(result_text)
+                
+                # 儲存到資料庫
+                conn.execute('''
+                    INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (japanese_word, result.get('part_of_speech', ''), result.get('sentence1', ''),
+                      result.get('sentence2', ''), result.get('chinese_meaning', ''),
+                      result.get('chinese_short', ''), result.get('jlpt_level', ''),
+                      result.get('kana_form', ''), result.get('kanji_form', ''),
+                      result.get('common_form', 'kanji')))
+                
+                results.append({'word': japanese_word, 'success': True})
+                
+            except json.JSONDecodeError as e:
+                errors.append({'word': japanese_word, 'error': f'JSON 解析錯誤: {str(e)}'})
+            except Exception as e:
+                errors.append({'word': japanese_word, 'error': str(e)})
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'total': len(word_list),
+            'completed': len(results),
+            'failed': len(errors),
+            'results': results,
+            'errors': errors,
+            'total_wait_time': 0
+        })
+    
+    # 使用 Gemini API（原有邏輯）
+    if custom_api_keys:
+        all_keys = [k.strip() for k in custom_api_keys.split(',') if k.strip()]
+    else:
+        all_keys = [DEFAULT_GEMINI_API_KEY] if DEFAULT_GEMINI_API_KEY else []
+    
+    if not all_keys:
+        return jsonify({'error': '請設定 API Key'}), 400
     
     try:
         genai_module = get_genai_module()
@@ -697,18 +819,7 @@ def generate_batch():
                 genai_module.configure(api_key=best_key)
                 working_model = genai_module.GenerativeModel(working_model_name)
                 
-                prompt = f"""請分析這個日文詞彙「{japanese_word}」，並以 JSON 格式回傳以下資訊：
-1. part_of_speech: 詞性（如：名詞、動詞、形容詞、副詞等）
-2. sentence1: 一個常用的日文例句（使用這個詞）
-3. sentence2: 另一個常用的日文例句（使用這個詞）
-4. chinese_short: 繁體中文簡短解釋（1-3個字，只寫最核心的意思，例如：吃、喝、貓、漂亮）
-5. chinese_meaning: 繁體中文完整解釋
-6. jlpt_level: 用日文解釋這個詞的意思（像日日辭典一樣，純日文定義）
-7. kana_form: 這個詞的純假名寫法（平假名或片假名）
-8. kanji_form: 這個詞的漢字寫法（如果有的話，沒有就留空）
-9. common_form: 最常用的寫法是哪種？回答 "kanji"（漢字常用）、"hiragana"（平假名常用）、"katakana"（片假名常用，常見於副詞、擬聲詞、外來語等）或 "both"（兩者都常用）
-
-只回傳純 JSON，不要有其他文字或 markdown 格式。"""
+                prompt = generate_word_prompt(japanese_word)
 
                 response = working_model.generate_content(prompt)
                 result_text = response.text.strip()

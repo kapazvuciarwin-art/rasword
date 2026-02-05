@@ -453,6 +453,86 @@
             margin-bottom: 20px;
         }
         
+        /* API 提供者選擇樣式 */
+        .api-provider-section {
+            margin-bottom: 25px;
+            padding-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+        
+        .api-provider-section h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        
+        .provider-toggle {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+        
+        .provider-option {
+            display: flex;
+            align-items: flex-start;
+            gap: 10px;
+            padding: 15px 20px;
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            flex: 1;
+            min-width: 200px;
+        }
+        
+        .provider-option:hover {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .provider-option input[type="radio"] {
+            margin-top: 3px;
+            width: 18px;
+            height: 18px;
+            cursor: pointer;
+        }
+        
+        .provider-option input[type="radio"]:checked + .provider-label {
+            color: #667eea;
+        }
+        
+        .provider-option:has(input:checked) {
+            border-color: #667eea;
+            background: #f0f4ff;
+        }
+        
+        .provider-label {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        
+        .provider-label strong {
+            font-size: 16px;
+        }
+        
+        .provider-label small {
+            color: #666;
+            font-size: 13px;
+        }
+        
+        .api-settings-area {
+            margin-top: 20px;
+            padding: 20px;
+            background: #fafafa;
+            border-radius: 10px;
+        }
+        
+        .api-settings-area h3 {
+            margin: 0 0 15px 0;
+            color: #333;
+        }
+        
         /* 單字列表 */
         .word-list {
             margin-top: 30px;
@@ -883,37 +963,103 @@
         <!-- 設定頁面 -->
         <div id="settings-tab" class="tab-content">
             <div class="settings-section">
-                <h2>⚙️ API Key 管理</h2>
-                <p class="settings-hint">你可以新增多個 Gemini API Key，系統會自動輪流使用以繞過速率限制。</p>
-                <p class="settings-hint">取得 API Key：<a href="https://aistudio.google.com/apikey" target="_blank">https://aistudio.google.com/apikey</a></p>
+                <h2>⚙️ API 設定</h2>
                 
-                <div class="api-keys-list" id="api-keys-list">
-                    <!-- API Keys 會動態載入這裡 -->
+                <!-- API 提供者選擇 -->
+                <div class="api-provider-section">
+                    <h3>🔌 選擇 API 提供者</h3>
+                    <div class="provider-toggle">
+                        <label class="provider-option">
+                            <input type="radio" name="api_provider" value="gemini" checked onchange="switchApiProvider('gemini')">
+                            <span class="provider-label">
+                                <strong>Google Gemini</strong>
+                                <small>免費額度，有速率限制</small>
+                            </span>
+                        </label>
+                        <label class="provider-option">
+                            <input type="radio" name="api_provider" value="openrouter" onchange="switchApiProvider('openrouter')">
+                            <span class="provider-label">
+                                <strong>OpenRouter</strong>
+                                <small>多種模型，付費使用</small>
+                            </span>
+                        </label>
+                    </div>
                 </div>
                 
-                <div class="add-api-key-section">
-                    <h3>新增 API Key</h3>
-                    <div class="form-group">
-                        <label>API Key 名稱（選填）</label>
-                        <input type="text" id="new_api_key_name" placeholder="例如：我的 Key 1">
+                <!-- Gemini 設定區域 -->
+                <div id="gemini-settings" class="api-settings-area">
+                    <h3>🔑 Gemini API Key 管理</h3>
+                    <p class="settings-hint">你可以新增多個 Gemini API Key，系統會自動輪流使用以繞過速率限制。</p>
+                    <p class="settings-hint">取得 API Key：<a href="https://aistudio.google.com/apikey" target="_blank">https://aistudio.google.com/apikey</a></p>
+                    
+                    <div class="api-keys-list" id="api-keys-list">
+                        <!-- API Keys 會動態載入這裡 -->
                     </div>
-                    <div class="form-group">
-                        <label>Gemini API Key</label>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="password" id="new_api_key" placeholder="貼上 API Key" style="flex: 1;">
-                            <button class="btn btn-primary" onclick="addApiKey()">➕ 新增</button>
+                    
+                    <div class="add-api-key-section">
+                        <h3>新增 API Key</h3>
+                        <div class="form-group">
+                            <label>API Key 名稱（選填）</label>
+                            <input type="text" id="new_api_key_name" placeholder="例如：我的 Key 1">
                         </div>
+                        <div class="form-group">
+                            <label>Gemini API Key</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="password" id="new_api_key" placeholder="貼上 API Key" style="flex: 1;">
+                                <button class="btn btn-primary" onclick="addApiKey()">➕ 新增</button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="rate-limit-info">
+                        <h3>📊 速率限制說明</h3>
+                        <p>• 每個 API Key 每 59 秒最多 5 次呼叫</p>
+                        <p>• 多個 Key 會自動輪流使用</p>
+                        <p>• 系統會優先選擇可用額度最多的 Key</p>
+                    </div>
+                </div>
+                
+                <!-- OpenRouter 設定區域 -->
+                <div id="openrouter-settings" class="api-settings-area" style="display: none;">
+                    <h3>🔑 OpenRouter API 設定</h3>
+                    <p class="settings-hint">OpenRouter 提供多種 AI 模型，包括 Claude、GPT-4、Gemini 等。</p>
+                    <p class="settings-hint">取得 API Key：<a href="https://openrouter.ai/keys" target="_blank">https://openrouter.ai/keys</a></p>
+                    
+                    <div class="add-api-key-section">
+                        <div class="form-group">
+                            <label>OpenRouter API Key</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="password" id="openrouter_api_key" placeholder="sk-or-..." style="flex: 1;">
+                                <button class="btn btn-primary" onclick="saveOpenRouterKey()">💾 儲存</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>模型選擇</label>
+                            <select id="openrouter_model">
+                                <option value="google/gemini-2.0-flash-001">Google Gemini 2.0 Flash（推薦，便宜）</option>
+                                <option value="google/gemini-2.5-flash-preview">Google Gemini 2.5 Flash Preview</option>
+                                <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
+                                <option value="anthropic/claude-3-haiku">Claude 3 Haiku（快速便宜）</option>
+                                <option value="openai/gpt-4o-mini">GPT-4o Mini（便宜）</option>
+                                <option value="openai/gpt-4o">GPT-4o</option>
+                                <option value="meta-llama/llama-3.1-70b-instruct">Llama 3.1 70B</option>
+                                <option value="qwen/qwen-2.5-72b-instruct">Qwen 2.5 72B</option>
+                            </select>
+                        </div>
+                    </div>
+                    
+                    <div id="openrouter-status" class="api-status"></div>
+                    
+                    <div class="rate-limit-info">
+                        <h3>💡 OpenRouter 說明</h3>
+                        <p>• 無速率限制，按使用量計費</p>
+                        <p>• 支援多種模型，可依需求選擇</p>
+                        <p>• 價格透明，可在官網查看</p>
+                        <p>• <a href="https://openrouter.ai/models" target="_blank">查看所有可用模型</a></p>
                     </div>
                 </div>
                 
                 <div class="api-status" id="api-status"></div>
-                
-                <div class="rate-limit-info">
-                    <h3>📊 速率限制說明</h3>
-                    <p>• 每個 API Key 每 59 秒最多 5 次呼叫</p>
-                    <p>• 多個 Key 會自動輪流使用</p>
-                    <p>• 系統會優先選擇可用額度最多的 Key</p>
-                </div>
             </div>
         </div>
     </div>
@@ -926,6 +1072,7 @@
         // 頁面載入時讀取儲存的 API Keys
         document.addEventListener('DOMContentLoaded', function() {
             loadApiKeysList();
+            loadOpenRouterSettings();
             // 遷移舊的單一 API Key
             const oldKey = localStorage.getItem('custom_gemini_api_key');
             if (oldKey && !getApiKeys().length) {
@@ -934,7 +1081,73 @@
                 localStorage.removeItem('custom_gemini_api_key');
                 loadApiKeysList();
             }
+            // 載入 API 提供者設定
+            const savedProvider = localStorage.getItem('api_provider') || 'gemini';
+            document.querySelector(`input[name="api_provider"][value="${savedProvider}"]`).checked = true;
+            switchApiProvider(savedProvider);
         });
+        
+        // 切換 API 提供者
+        function switchApiProvider(provider) {
+            localStorage.setItem('api_provider', provider);
+            
+            const geminiSettings = document.getElementById('gemini-settings');
+            const openrouterSettings = document.getElementById('openrouter-settings');
+            
+            if (provider === 'gemini') {
+                geminiSettings.style.display = 'block';
+                openrouterSettings.style.display = 'none';
+            } else {
+                geminiSettings.style.display = 'none';
+                openrouterSettings.style.display = 'block';
+            }
+        }
+        
+        // 取得目前選擇的 API 提供者
+        function getApiProvider() {
+            return localStorage.getItem('api_provider') || 'gemini';
+        }
+        
+        // OpenRouter 設定
+        function getOpenRouterKey() {
+            return localStorage.getItem('openrouter_api_key') || '';
+        }
+        
+        function getOpenRouterModel() {
+            return localStorage.getItem('openrouter_model') || 'google/gemini-2.0-flash-001';
+        }
+        
+        function saveOpenRouterKey() {
+            const key = document.getElementById('openrouter_api_key').value.trim();
+            const model = document.getElementById('openrouter_model').value;
+            
+            if (!key) {
+                alert('請輸入 OpenRouter API Key');
+                return;
+            }
+            
+            localStorage.setItem('openrouter_api_key', key);
+            localStorage.setItem('openrouter_model', model);
+            
+            const status = document.getElementById('openrouter-status');
+            status.className = 'api-status success';
+            status.textContent = '✅ OpenRouter 設定已儲存！';
+        }
+        
+        function loadOpenRouterSettings() {
+            const key = getOpenRouterKey();
+            const model = getOpenRouterModel();
+            
+            if (key) {
+                document.getElementById('openrouter_api_key').value = key;
+            }
+            document.getElementById('openrouter_model').value = model;
+            
+            // 監聽模型選擇變更
+            document.getElementById('openrouter_model').addEventListener('change', function() {
+                localStorage.setItem('openrouter_model', this.value);
+            });
+        }
         
         // 取得所有 API Keys
         function getApiKeys() {
@@ -1067,6 +1280,25 @@
         
         // 更新速率限制狀態顯示
         async function updateRateLimitStatus() {
+            const statusEl = document.getElementById('rate-limit-status');
+            const provider = getApiProvider();
+            
+            // OpenRouter 模式：顯示已啟用
+            if (provider === 'openrouter') {
+                if (statusEl) {
+                    const hasKey = getOpenRouterKey() ? true : false;
+                    if (hasKey) {
+                        statusEl.className = 'rate-limit-status';
+                        statusEl.textContent = '🚀 OpenRouter';
+                    } else {
+                        statusEl.className = 'rate-limit-status warning';
+                        statusEl.textContent = '⚠️ 需設定 Key';
+                    }
+                }
+                return;
+            }
+            
+            // Gemini 模式：原有邏輯
             try {
                 const response = await fetch('/api/rate-limit-status', {
                     method: 'POST',
@@ -1076,7 +1308,6 @@
                 
                 if (response.ok) {
                     const data = await response.json();
-                    const statusEl = document.getElementById('rate-limit-status');
                     if (statusEl) {
                         const remaining = data.total_remaining;
                         const max = data.total_max;
@@ -1267,19 +1498,36 @@
             
             // 繼續生成新詞彙
             btn.textContent = '⏳ 生成中...';
-            const estimatedTime = Math.ceil(newWords.length / 5) * 59;  // 預估時間
-            progressText.textContent = `正在處理 ${newWords.length} 個新詞彙（跳過 ${duplicates.length} 個重複）`;
-            progressText.innerHTML += `<br><small>⏱️ 速率限制：每 59 秒最多 5 個，預估需要約 ${estimatedTime} 秒</small>`;
+            const provider = getApiProvider();
+            
+            if (provider === 'gemini') {
+                const estimatedTime = Math.ceil(newWords.length / 5) * 59;  // 預估時間
+                progressText.textContent = `正在處理 ${newWords.length} 個新詞彙（跳過 ${duplicates.length} 個重複）`;
+                progressText.innerHTML += `<br><small>⏱️ 速率限制：每 59 秒最多 5 個，預估需要約 ${estimatedTime} 秒</small>`;
+            } else {
+                progressText.textContent = `正在處理 ${newWords.length} 個新詞彙（跳過 ${duplicates.length} 個重複）`;
+                progressText.innerHTML += `<br><small>🚀 使用 OpenRouter，無速率限制</small>`;
+            }
             progressFill.style.width = '10%';
             
             try {
+                // 根據提供者準備請求資料
+                const requestBody = {
+                    words: newWords.join('\n'),
+                    api_provider: provider
+                };
+                
+                if (provider === 'openrouter') {
+                    requestBody.openrouter_key = getOpenRouterKey();
+                    requestBody.openrouter_model = getOpenRouterModel();
+                } else {
+                    requestBody.api_key = getApiKey();
+                }
+                
                 const response = await fetch('/api/generate-batch', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        words: newWords.join('\n'),
-                        api_key: getApiKey()
-                    })
+                    body: JSON.stringify(requestBody)
                 });
                 
                 progressFill.style.width = '100%';
@@ -1941,19 +2189,30 @@
         async function doGenerateWordInfo(japaneseWord, btn, originalText, retryCount = 0) {
             const MAX_RETRIES = 3;
             const TIMEOUT_MS = 60000; // 60秒超時
+            const provider = getApiProvider();
             
             try {
                 // 使用 AbortController 實現超時
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
                 
+                // 根據提供者準備請求資料
+                const requestBody = { 
+                    japanese_word: japaneseWord,
+                    api_provider: provider
+                };
+                
+                if (provider === 'openrouter') {
+                    requestBody.openrouter_key = getOpenRouterKey();
+                    requestBody.openrouter_model = getOpenRouterModel();
+                } else {
+                    requestBody.api_key = getApiKey();
+                }
+                
                 const response = await fetch('/api/generate', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        japanese_word: japaneseWord,
-                        api_key: getApiKey()
-                    }),
+                    body: JSON.stringify(requestBody),
                     signal: controller.signal
                 });
                 
@@ -1962,8 +2221,8 @@
                 const result = await response.json();
                 
                 if (!response.ok) {
-                    if (result.rate_limited && retryCount < MAX_RETRIES) {
-                        // 速率限制，等待後自動重試
+                    if (result.rate_limited && retryCount < MAX_RETRIES && provider === 'gemini') {
+                        // 速率限制，等待後自動重試（僅 Gemini）
                         const waitTime = Math.ceil(result.wait_time);
                         btn.textContent = `⏳ 等待 ${waitTime}秒... (重試 ${retryCount + 1}/${MAX_RETRIES})`;
                         
@@ -1978,8 +2237,10 @@
                     return;
                 }
                 
-                // 更新速率限制狀態
-                updateRateLimitStatus();
+                // 更新速率限制狀態（僅 Gemini）
+                if (provider === 'gemini') {
+                    updateRateLimitStatus();
+                }
                 
                 // 填入生成的資料
                 document.getElementById('part_of_speech').value = result.part_of_speech || '';
