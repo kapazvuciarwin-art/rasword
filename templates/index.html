@@ -352,6 +352,12 @@
             font-size: 12px;
         }
         
+        .stats-cell {
+            font-size: 12px;
+            white-space: nowrap;
+            color: #666;
+        }
+        
         /* 練習區域樣式 */
         .quiz-section {
             text-align: center;
@@ -1114,6 +1120,9 @@
             if (selectedId === correctId) {
                 btn.classList.add('correct');
                 
+                // 記錄答對
+                recordAnswer(q.id, 'quiz', true);
+                
                 // 自動顯示所有提示
                 showAllHints();
                 
@@ -1129,10 +1138,31 @@
                 `;
             } else {
                 btn.classList.add('wrong');
+                
+                // 記錄答錯
+                recordAnswer(q.id, 'quiz', false);
+                
                 resultArea.innerHTML = `
                     <div class="result-message wrong">❌ 答錯了！正確答案是：${currentQuiz.question.correct_meaning}</div>
                     <button class="btn btn-danger" onclick="retryQuiz()">重新作答</button>
                 `;
+            }
+        }
+        
+        // 記錄答題結果（SRS）
+        async function recordAnswer(wordId, quizType, isCorrect) {
+            try {
+                await fetch('/api/record-answer', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        word_id: wordId,
+                        quiz_type: quizType,
+                        is_correct: isCorrect
+                    })
+                });
+            } catch (error) {
+                console.error('記錄答題結果失敗:', error);
             }
         }
         
@@ -1238,9 +1268,9 @@
                             <tr>
                                 <th>日文詞</th>
                                 <th>假名</th>
-                                <th>漢字</th>
-                                <th>常用</th>
                                 <th>簡短中文</th>
+                                <th>選擇題</th>
+                                <th>打字</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
@@ -1248,13 +1278,15 @@
                 `;
                 
                 for (const word of words) {
+                    const quizStats = `✓${word.quiz_correct || 0} ✗${word.quiz_wrong || 0}`;
+                    const typingStats = `✓${word.typing_correct || 0} ✗${word.typing_wrong || 0}`;
                     tableHtml += `
                         <tr>
                             <td>${word.japanese_word}</td>
                             <td>${word.kana_form || '-'}</td>
-                            <td>${word.kanji_form || '-'}</td>
-                            <td>${commonFormText[word.common_form] || '-'}</td>
                             <td>${word.chinese_short || '-'}</td>
+                            <td class="stats-cell">${quizStats}</td>
+                            <td class="stats-cell">${typingStats}</td>
                             <td>
                                 <button class="btn btn-danger delete-btn" onclick="deleteWord(${word.id})">刪除</button>
                             </td>
@@ -1415,6 +1447,9 @@
             }
             
             const isCorrect = userAnswer === correctAnswer;
+            
+            // 記錄答題結果（SRS）
+            recordAnswer(currentTypingQuiz.question.id, 'typing', isCorrect);
             
             if (isCorrect) {
                 resultArea.innerHTML = `

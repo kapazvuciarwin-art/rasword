@@ -3,6 +3,7 @@ import sqlite3
 import random
 import os
 import json
+from datetime import datetime, timedelta
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -61,7 +62,13 @@ def init_db():
             jlpt_level TEXT,
             kana_form TEXT,
             kanji_form TEXT,
-            common_form TEXT DEFAULT 'kanji'
+            common_form TEXT DEFAULT 'kanji',
+            quiz_correct INTEGER DEFAULT 0,
+            quiz_wrong INTEGER DEFAULT 0,
+            quiz_next_review TEXT,
+            typing_correct INTEGER DEFAULT 0,
+            typing_wrong INTEGER DEFAULT 0,
+            typing_next_review TEXT
         )
     ''')
     # 資料庫升級 - 新增欄位
@@ -76,6 +83,19 @@ def init_db():
         conn.execute('ALTER TABLE words ADD COLUMN kanji_form TEXT')
     if 'common_form' not in columns:
         conn.execute('ALTER TABLE words ADD COLUMN common_form TEXT DEFAULT "kanji"')
+    # SRS 欄位
+    if 'quiz_correct' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN quiz_correct INTEGER DEFAULT 0')
+    if 'quiz_wrong' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN quiz_wrong INTEGER DEFAULT 0')
+    if 'quiz_next_review' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN quiz_next_review TEXT')
+    if 'typing_correct' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN typing_correct INTEGER DEFAULT 0')
+    if 'typing_wrong' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN typing_wrong INTEGER DEFAULT 0')
+    if 'typing_next_review' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN typing_next_review TEXT')
     
     conn.commit()
     conn.close()
@@ -131,6 +151,104 @@ def delete_word(word_id):
     conn.close()
     return jsonify({'success': True})
 
+def calculate_srs_weight(word, quiz_type):
+    """計算 SRS 權重，權重越高越容易被選中"""
+    if quiz_type == 'quiz':
+        correct = word['quiz_correct'] or 0
+        wrong = word['quiz_wrong'] or 0
+        next_review = word['quiz_next_review']
+    else:  # typing
+        correct = word['typing_correct'] or 0
+        wrong = word['typing_wrong'] or 0
+        next_review = word['typing_next_review']
+    
+    # 基礎權重
+    weight = 10.0
+    
+    # 錯誤越多，權重越高
+    weight += wrong * 5
+    
+    # 正確越多，權重越低（但不低於 1）
+    weight -= correct * 2
+    
+    # 從未答過的題目給予較高權重
+    if correct == 0 and wrong == 0:
+        weight += 15
+    
+    # 檢查是否到了複習時間
+    if next_review:
+        try:
+            review_time = datetime.fromisoformat(next_review)
+            now = datetime.now()
+            if now >= review_time:
+                # 已經到複習時間，增加權重
+                hours_overdue = (now - review_time).total_seconds() / 3600
+                weight += min(hours_overdue, 20)  # 最多加 20
+            else:
+                # 還沒到複習時間，大幅降低權重
+                weight = max(1, weight - 20)
+        except:
+            pass
+    
+    return max(1, weight)
+
+def calculate_next_review(correct_count, wrong_count, is_correct):
+    """計算下次複習時間"""
+    # 基礎間隔（分鐘）
+    if is_correct:
+        # 正確：根據連續正確次數增加間隔
+        intervals = [10, 30, 60, 240, 480, 1440, 2880, 5760, 10080]  # 10分, 30分, 1時, 4時, 8時, 1天, 2天, 4天, 7天
+        index = min(correct_count, len(intervals) - 1)
+        minutes = intervals[index]
+    else:
+        # 錯誤：很快再次出現
+        minutes = 5
+    
+    return datetime.now() + timedelta(minutes=minutes)
+
+@app.route('/api/record-answer', methods=['POST'])
+def record_answer():
+    """記錄答題結果"""
+    data = request.json
+    word_id = data.get('word_id')
+    quiz_type = data.get('quiz_type')  # 'quiz' 或 'typing'
+    is_correct = data.get('is_correct', False)
+    
+    if not word_id or not quiz_type:
+        return jsonify({'error': '缺少必要參數'}), 400
+    
+    conn = get_db()
+    
+    # 獲取當前統計
+    word = conn.execute('SELECT * FROM words WHERE id = ?', (word_id,)).fetchone()
+    if not word:
+        conn.close()
+        return jsonify({'error': '找不到單字'}), 404
+    
+    if quiz_type == 'quiz':
+        correct = (word['quiz_correct'] or 0) + (1 if is_correct else 0)
+        wrong = (word['quiz_wrong'] or 0) + (0 if is_correct else 1)
+        next_review = calculate_next_review(correct, wrong, is_correct).isoformat()
+        
+        conn.execute('''
+            UPDATE words SET quiz_correct = ?, quiz_wrong = ?, quiz_next_review = ?
+            WHERE id = ?
+        ''', (correct, wrong, next_review, word_id))
+    else:  # typing
+        correct = (word['typing_correct'] or 0) + (1 if is_correct else 0)
+        wrong = (word['typing_wrong'] or 0) + (0 if is_correct else 1)
+        next_review = calculate_next_review(correct, wrong, is_correct).isoformat()
+        
+        conn.execute('''
+            UPDATE words SET typing_correct = ?, typing_wrong = ?, typing_next_review = ?
+            WHERE id = ?
+        ''', (correct, wrong, next_review, word_id))
+    
+    conn.commit()
+    conn.close()
+    
+    return jsonify({'success': True, 'next_review': next_review})
+
 @app.route('/api/quiz', methods=['GET'])
 def get_quiz():
     conn = get_db()
@@ -140,8 +258,19 @@ def get_quiz():
     if len(words) < 10:
         return jsonify({'error': '資料庫中至少需要10個單字才能開始練習'}), 400
     
-    # 選擇一個題目
-    question_word = random.choice(words)
+    # 計算每個單字的 SRS 權重
+    weighted_words = [(w, calculate_srs_weight(w, 'quiz')) for w in words]
+    total_weight = sum(weight for _, weight in weighted_words)
+    
+    # 根據權重隨機選擇
+    r = random.uniform(0, total_weight)
+    cumulative = 0
+    question_word = words[0]
+    for word, weight in weighted_words:
+        cumulative += weight
+        if r <= cumulative:
+            question_word = word
+            break
     
     # 選擇9個其他單字作為干擾選項
     other_words = [w for w in words if w['id'] != question_word['id']]
@@ -358,8 +487,19 @@ def get_typing_quiz():
     if len(words) < 1:
         return jsonify({'error': '資料庫中沒有足夠的單字（需要有漢字和假名寫法的單字）'}), 400
     
-    # 隨機選擇一個題目
-    question_word = random.choice(words)
+    # 計算每個單字的 SRS 權重
+    weighted_words = [(w, calculate_srs_weight(w, 'typing')) for w in words]
+    total_weight = sum(weight for _, weight in weighted_words)
+    
+    # 根據權重隨機選擇
+    r = random.uniform(0, total_weight)
+    cumulative = 0
+    question_word = words[0]
+    for word, weight in weighted_words:
+        cumulative += weight
+        if r <= cumulative:
+            question_word = word
+            break
     
     return jsonify({
         'question': {
