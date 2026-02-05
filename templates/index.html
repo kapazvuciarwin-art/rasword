@@ -396,6 +396,24 @@
             color: #721c24;
         }
         
+        .detail-btn-area {
+            margin: 15px 0;
+        }
+        
+        .chinese-detail {
+            background: #e8f5e9;
+            padding: 15px 20px;
+            border-radius: 10px;
+            margin: 15px 0;
+            text-align: left;
+            border-left: 4px solid #4caf50;
+        }
+        
+        .chinese-detail p {
+            margin: 8px 0;
+            color: #2e7d32;
+        }
+        
         .quiz-controls {
             margin-top: 20px;
         }
@@ -894,6 +912,7 @@
             const correctId = currentQuiz.question.id;
             const resultArea = document.getElementById('result-area');
             const optionsGrid = document.getElementById('options-grid');
+            const q = currentQuiz.question;
             
             // 禁用所有選項
             optionsGrid.querySelectorAll('.option-btn').forEach(b => {
@@ -905,8 +924,18 @@
             
             if (selectedId === correctId) {
                 btn.classList.add('correct');
+                
+                // 自動顯示所有提示
+                showAllHints();
+                
                 resultArea.innerHTML = `
                     <div class="result-message correct">🎉 答對了！</div>
+                    <div class="detail-btn-area">
+                        <button class="btn btn-secondary" onclick="showChineseDetail()">📖 中文詳解</button>
+                    </div>
+                    <div id="chinese-detail-area" class="chinese-detail" style="display: none;">
+                        <p><strong>中文解釋：</strong>${q.correct_meaning || '無'}</p>
+                    </div>
                     <button class="btn btn-success" onclick="loadQuiz()">下一題 →</button>
                 `;
             } else {
@@ -915,6 +944,35 @@
                     <div class="result-message wrong">❌ 答錯了！正確答案是：${currentQuiz.question.correct_meaning}</div>
                     <button class="btn btn-danger" onclick="retryQuiz()">重新作答</button>
                 `;
+            }
+        }
+        
+        // 顯示所有提示
+        function showAllHints() {
+            const hintArea = document.getElementById('hint-area');
+            const q = currentQuiz.question;
+            
+            let hintsHtml = '';
+            if (q.sentence1) {
+                hintsHtml += `<div class="hint-text">💡 短句1：${q.sentence1}</div>`;
+            }
+            if (q.sentence2) {
+                hintsHtml += `<div class="hint-text">💡 短句2：${q.sentence2}</div>`;
+            }
+            if (q.jlpt_level) {
+                hintsHtml += `<div class="hint-text hint-dictionary">📖 日文解釋：${q.jlpt_level}</div>`;
+            }
+            
+            hintArea.innerHTML = hintsHtml;
+        }
+        
+        // 顯示中文詳解
+        function showChineseDetail() {
+            const detailArea = document.getElementById('chinese-detail-area');
+            if (detailArea.style.display === 'none') {
+                detailArea.style.display = 'block';
+            } else {
+                detailArea.style.display = 'none';
             }
         }
         
