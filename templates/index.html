@@ -1035,25 +1035,31 @@
                         </div>
                         <div class="form-group">
                             <label>模型選擇</label>
-                            <select id="openrouter_model">
+                            <select id="openrouter_model" onchange="toggleCustomModel()">
                                 <optgroup label="🆓 免費模型">
-                                    <option value="meta-llama/llama-3.2-3b-instruct:free" selected>Llama 3.2 3B（免費，推薦）</option>
-                                    <option value="google/gemma-2-9b-it:free">Google Gemma 2 9B（免費）</option>
-                                    <option value="qwen/qwen-2-7b-instruct:free">Qwen 2 7B（免費，中文佳）</option>
-                                    <option value="mistralai/mistral-7b-instruct:free">Mistral 7B（免費）</option>
-                                    <option value="microsoft/phi-3-mini-128k-instruct:free">Microsoft Phi-3 Mini（免費）</option>
-                                    <option value="huggingfaceh4/zephyr-7b-beta:free">Zephyr 7B（免費）</option>
+                                    <option value="deepseek/deepseek-r1:free" selected>DeepSeek R1（免費，推薦）</option>
+                                    <option value="deepseek/deepseek-chat:free">DeepSeek Chat（免費）</option>
+                                    <option value="qwen/qwen3-14b:free">Qwen 3 14B（免費，中文佳）</option>
+                                    <option value="qwen/qwen3-32b:free">Qwen 3 32B（免費，中文佳）</option>
+                                    <option value="meta-llama/llama-4-scout:free">Llama 4 Scout（免費）</option>
+                                    <option value="google/gemma-3-27b-it:free">Gemma 3 27B（免費）</option>
                                 </optgroup>
                                 <optgroup label="💰 付費模型（便宜）">
                                     <option value="google/gemini-2.0-flash-001">Google Gemini 2.0 Flash</option>
                                     <option value="anthropic/claude-3-haiku">Claude 3 Haiku</option>
                                     <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
                                 </optgroup>
-                                <optgroup label="💰 付費模型（高品質）">
-                                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
-                                    <option value="openai/gpt-4o">GPT-4o</option>
+                                <optgroup label="⚙️ 自訂">
+                                    <option value="custom">自訂模型名稱...</option>
                                 </optgroup>
                             </select>
+                        </div>
+                        <div class="form-group" id="custom-model-group" style="display: none;">
+                            <label>自訂模型名稱</label>
+                            <input type="text" id="custom_openrouter_model" placeholder="例如: meta-llama/llama-3.2-3b-instruct:free">
+                            <p class="settings-hint" style="margin-top: 5px;">
+                                <a href="https://openrouter.ai/models?q=free" target="_blank">查看所有免費模型</a>（篩選 Price: Free）
+                            </p>
                         </div>
                     </div>
                     
@@ -1123,38 +1129,75 @@
         }
         
         function getOpenRouterModel() {
-            return localStorage.getItem('openrouter_model') || 'meta-llama/llama-3.2-3b-instruct:free';
+            const savedModel = localStorage.getItem('openrouter_model') || 'deepseek/deepseek-r1:free';
+            if (savedModel === 'custom') {
+                return localStorage.getItem('openrouter_custom_model') || 'deepseek/deepseek-r1:free';
+            }
+            return savedModel;
+        }
+        
+        function toggleCustomModel() {
+            const select = document.getElementById('openrouter_model');
+            const customGroup = document.getElementById('custom-model-group');
+            if (select.value === 'custom') {
+                customGroup.style.display = 'block';
+            } else {
+                customGroup.style.display = 'none';
+            }
         }
         
         function saveOpenRouterKey() {
             const key = document.getElementById('openrouter_api_key').value.trim();
             const model = document.getElementById('openrouter_model').value;
+            const customModel = document.getElementById('custom_openrouter_model').value.trim();
             
             if (!key) {
                 alert('請輸入 OpenRouter API Key');
                 return;
             }
             
+            if (model === 'custom' && !customModel) {
+                alert('請輸入自訂模型名稱');
+                return;
+            }
+            
             localStorage.setItem('openrouter_api_key', key);
             localStorage.setItem('openrouter_model', model);
+            if (model === 'custom') {
+                localStorage.setItem('openrouter_custom_model', customModel);
+            }
             
             const status = document.getElementById('openrouter-status');
             status.className = 'api-status success';
             status.textContent = '✅ OpenRouter 設定已儲存！';
+            
+            // 更新狀態顯示
+            updateRateLimitStatus();
         }
         
         function loadOpenRouterSettings() {
             const key = getOpenRouterKey();
-            const model = getOpenRouterModel();
+            const savedModel = localStorage.getItem('openrouter_model') || 'deepseek/deepseek-r1:free';
+            const customModel = localStorage.getItem('openrouter_custom_model') || '';
             
             if (key) {
                 document.getElementById('openrouter_api_key').value = key;
             }
-            document.getElementById('openrouter_model').value = model;
+            
+            // 設定模型選擇
+            const selectEl = document.getElementById('openrouter_model');
+            selectEl.value = savedModel;
+            
+            // 如果是自訂模型，顯示自訂欄位
+            if (savedModel === 'custom') {
+                document.getElementById('custom-model-group').style.display = 'block';
+                document.getElementById('custom_openrouter_model').value = customModel;
+            }
             
             // 監聽模型選擇變更
-            document.getElementById('openrouter_model').addEventListener('change', function() {
+            selectEl.addEventListener('change', function() {
                 localStorage.setItem('openrouter_model', this.value);
+                toggleCustomModel();
             });
         }
         

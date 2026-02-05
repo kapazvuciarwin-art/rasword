@@ -14,7 +14,7 @@ load_dotenv()
 
 # OpenRouter API 設定
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_DEFAULT_MODEL = "meta-llama/llama-3.2-3b-instruct:free"  # 預設免費模型
+OPENROUTER_DEFAULT_MODEL = "deepseek/deepseek-r1:free"  # 預設免費模型
 
 app = Flask(__name__)
 
