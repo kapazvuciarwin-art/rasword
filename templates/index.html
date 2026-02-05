@@ -1037,18 +1037,20 @@
                             <label>模型選擇</label>
                             <select id="openrouter_model">
                                 <optgroup label="🆓 免費模型">
-                                    <option value="google/gemini-2.0-flash-exp:free" selected>Google Gemini 2.0 Flash（免費，推薦）</option>
+                                    <option value="meta-llama/llama-3.2-3b-instruct:free" selected>Llama 3.2 3B（免費，推薦）</option>
                                     <option value="google/gemma-2-9b-it:free">Google Gemma 2 9B（免費）</option>
-                                    <option value="meta-llama/llama-3.1-8b-instruct:free">Llama 3.1 8B（免費）</option>
-                                    <option value="qwen/qwen-2-7b-instruct:free">Qwen 2 7B（免費）</option>
+                                    <option value="qwen/qwen-2-7b-instruct:free">Qwen 2 7B（免費，中文佳）</option>
                                     <option value="mistralai/mistral-7b-instruct:free">Mistral 7B（免費）</option>
                                     <option value="microsoft/phi-3-mini-128k-instruct:free">Microsoft Phi-3 Mini（免費）</option>
+                                    <option value="huggingfaceh4/zephyr-7b-beta:free">Zephyr 7B（免費）</option>
                                 </optgroup>
-                                <optgroup label="💰 付費模型">
+                                <optgroup label="💰 付費模型（便宜）">
                                     <option value="google/gemini-2.0-flash-001">Google Gemini 2.0 Flash</option>
-                                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
                                     <option value="anthropic/claude-3-haiku">Claude 3 Haiku</option>
                                     <option value="openai/gpt-4o-mini">GPT-4o Mini</option>
+                                </optgroup>
+                                <optgroup label="💰 付費模型（高品質）">
+                                    <option value="anthropic/claude-3.5-sonnet">Claude 3.5 Sonnet</option>
                                     <option value="openai/gpt-4o">GPT-4o</option>
                                 </optgroup>
                             </select>
@@ -1121,7 +1123,7 @@
         }
         
         function getOpenRouterModel() {
-            return localStorage.getItem('openrouter_model') || 'google/gemini-2.0-flash-exp:free';
+            return localStorage.getItem('openrouter_model') || 'meta-llama/llama-3.2-3b-instruct:free';
         }
         
         function saveOpenRouterKey() {

@@ -14,7 +14,7 @@ load_dotenv()
 
 # OpenRouter API 設定
 OPENROUTER_API_URL = "https://openrouter.ai/api/v1/chat/completions"
-OPENROUTER_DEFAULT_MODEL = "google/gemini-2.0-flash-exp:free"  # 預設免費模型
+OPENROUTER_DEFAULT_MODEL = "meta-llama/llama-3.2-3b-instruct:free"  # 預設免費模型
 
 app = Flask(__name__)
 
@@ -502,8 +502,8 @@ def call_openrouter_api(api_key, prompt, model=None):
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://rasword.local",  # 可選，用於統計
-        "X-Title": "Rasword Japanese Learning"  # 可選，用於統計
+        "HTTP-Referer": "http://localhost:5000",
+        "X-Title": "Rasword"
     }
     
     data = {
@@ -517,10 +517,22 @@ def call_openrouter_api(api_key, prompt, model=None):
         "temperature": 0.7
     }
     
+    print(f"[OpenRouter] 使用模型: {model}")
+    print(f"[OpenRouter] API Key 前 10 字元: {api_key[:10]}...")
+    
     response = requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=60)
-    response.raise_for_status()
+    
+    # 更詳細的錯誤處理
+    if response.status_code != 200:
+        error_detail = response.text
+        print(f"[OpenRouter] 錯誤 {response.status_code}: {error_detail}")
+        raise Exception(f"API 錯誤 {response.status_code}: {error_detail}")
     
     result = response.json()
+    
+    if 'error' in result:
+        raise Exception(f"API 回應錯誤: {result['error']}")
+    
     return result['choices'][0]['message']['content']
 
 def generate_word_prompt(japanese_word):
