@@ -1274,40 +1274,50 @@
                 return;
             }
             
-            // Gemini 模式：原有邏輯
-            try {
-                const response = await fetch('/api/rate-limit-status', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ api_key: getApiKey() })
-                });
+            // Gemini 模式：使用前端速率限制器（用戶 IP）
+            if (statusEl) {
+                const apiKeys = getApiKeys().filter(k => k.enabled).map(k => k.key);
+                const keyCount = apiKeys.length;
                 
-                if (response.ok) {
-                    const data = await response.json();
-                    if (statusEl) {
-                        const remaining = data.total_remaining;
-                        const max = data.total_max;
-                        const keyCount = data.key_count;
-                        
-                        if (remaining === 0) {
-                            // 找出最短等待時間
-                            let minWait = Math.min(...data.keys.map(k => k.wait_time));
-                            statusEl.className = 'rate-limit-status danger';
-                            statusEl.textContent = `⏳ 等待 ${Math.ceil(minWait)}秒`;
-                        } else if (remaining <= keyCount * 2) {
-                            statusEl.className = 'rate-limit-status warning';
-                            statusEl.textContent = `⚡ ${remaining}/${max} (${keyCount} Keys)`;
-                        } else {
-                            statusEl.className = 'rate-limit-status';
-                            statusEl.textContent = `✓ ${remaining}/${max} (${keyCount} Keys)`;
+                if (keyCount === 0) {
+                    statusEl.className = 'rate-limit-status warning';
+                    statusEl.textContent = '⚠️ 需設定 Key';
+                    return;
+                }
+                
+                // 計算總可用額度
+                let totalRemaining = 0;
+                let minWait = Infinity;
+                
+                for (const key of apiKeys) {
+                    const wait = clientRateLimiter.getWaitTime(key);
+                    if (wait === 0) {
+                        // 計算這個 key 的可用額度
+                        const keyPreview = key.substring(0, 10);
+                        const calls = clientRateLimiter.calls[keyPreview] || [];
+                        const now = Date.now();
+                        const validCalls = calls.filter(t => now - t < clientRateLimiter.period);
+                        const remaining = clientRateLimiter.maxCalls - validCalls.length;
+                        totalRemaining += remaining;
+                    } else {
+                        if (wait < minWait) {
+                            minWait = wait;
                         }
                     }
-                    
-                    // 更新設定頁面的 Key 狀態
-                    updateApiKeysStatus(data.keys);
                 }
-            } catch (error) {
-                console.error('無法取得速率限制狀態:', error);
+                
+                const max = keyCount * clientRateLimiter.maxCalls;
+                
+                if (totalRemaining === 0 && minWait < Infinity) {
+                    statusEl.className = 'rate-limit-status danger';
+                    statusEl.textContent = `⏳ 等待 ${Math.ceil(minWait / 1000)}秒 (用戶 IP)`;
+                } else if (totalRemaining <= keyCount * 2) {
+                    statusEl.className = 'rate-limit-status warning';
+                    statusEl.textContent = `⚡ ${totalRemaining}/${max} (${keyCount} Keys, 用戶 IP)`;
+                } else {
+                    statusEl.className = 'rate-limit-status';
+                    statusEl.textContent = `✓ ${totalRemaining}/${max} (${keyCount} Keys, 用戶 IP)`;
+                }
             }
         }
         
@@ -1479,7 +1489,7 @@
             if (provider === 'gemini') {
                 const estimatedTime = Math.ceil(newWords.length / 5) * 59;  // 預估時間
                 progressText.textContent = `正在處理 ${newWords.length} 個新詞彙（跳過 ${duplicates.length} 個重複）`;
-                progressText.innerHTML += `<br><small>⏱️ 速率限制：每 59 秒最多 5 個，預估需要約 ${estimatedTime} 秒</small>`;
+                progressText.innerHTML += `<br><small>⏱️ 速率限制：每 59 秒最多 5 個（使用用戶 IP），預估需要約 ${estimatedTime} 秒</small>`;
             } else {
                 progressText.textContent = `正在處理 ${newWords.length} 個新詞彙（跳過 ${duplicates.length} 個重複）`;
                 progressText.innerHTML += `<br><small>🚀 使用 OpenRouter，無速率限制</small>`;
@@ -1487,41 +1497,139 @@
             progressFill.style.width = '10%';
             
             try {
-                // 根據提供者準備請求資料
-                const requestBody = {
-                    words: newWords.join('\n'),
-                    api_provider: provider
-                };
+                let result;
                 
-                if (provider === 'openrouter') {
-                    requestBody.openrouter_key = getOpenRouterKey();
+                // Gemini：直接從瀏覽器呼叫（使用用戶 IP）
+                if (provider === 'gemini') {
+                    const apiKeys = getApiKeys().filter(k => k.enabled).map(k => k.key);
+                    if (apiKeys.length === 0) {
+                        throw new Error('請先設定 Gemini API Key');
+                    }
+                    
+                    const results = [];
+                    const errors = [];
+                    let totalWaitTime = 0;
+                    
+                    for (let i = 0; i < newWords.length; i++) {
+                        const word = newWords[i];
+                        const progress = ((i + 1) / newWords.length) * 90 + 10; // 10% 到 100%
+                        progressFill.style.width = `${progress}%`;
+                        progressText.textContent = `正在處理 ${i + 1}/${newWords.length}：${word}`;
+                        
+                        try {
+                            // 選擇可用的 API Key
+                            let selectedKey = null;
+                            for (const key of apiKeys) {
+                                if (clientRateLimiter.canCall(key)) {
+                                    selectedKey = key;
+                                    break;
+                                }
+                            }
+                            
+                            if (!selectedKey) {
+                                // 等待最短的冷卻時間
+                                let minWait = Infinity;
+                                for (const key of apiKeys) {
+                                    const wait = clientRateLimiter.getWaitTime(key);
+                                    if (wait < minWait) {
+                                        minWait = wait;
+                                        selectedKey = key;
+                                    }
+                                }
+                                
+                                if (minWait > 0) {
+                                    progressText.textContent = `等待 ${Math.ceil(minWait / 1000)} 秒...`;
+                                    await new Promise(resolve => setTimeout(resolve, minWait));
+                                    totalWaitTime += minWait / 1000;
+                                }
+                            }
+                            
+                            // 記錄呼叫
+                            clientRateLimiter.recordCall(selectedKey);
+                            
+                            // 生成 prompt
+                            const prompt = generateWordPrompt(word);
+                            
+                            // 直接呼叫 Gemini API
+                            const geminiResult = await callGeminiApiDirect(selectedKey, prompt);
+                            
+                            // 解析 JSON
+                            let resultText = geminiResult.text;
+                            if (resultText.startsWith('```')) {
+                                const lines = resultText.split('\n');
+                                resultText = lines.slice(1, -1).join('\n');
+                            }
+                            
+                            const wordData = JSON.parse(resultText);
+                            
+                            // 儲存到資料庫
+                            const saveResponse = await fetch('/api/words', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({
+                                    japanese_word: word,
+                                    part_of_speech: wordData.part_of_speech || '',
+                                    kana_form: wordData.kana_form || '',
+                                    kanji_form: wordData.kanji_form || '',
+                                    common_form: wordData.common_form || 'kanji',
+                                    sentence1: wordData.sentence1 || '',
+                                    sentence2: wordData.sentence2 || '',
+                                    chinese_short: wordData.chinese_short || '',
+                                    chinese_meaning: wordData.chinese_meaning || '',
+                                    jlpt_level: wordData.jlpt_level || ''
+                                })
+                            });
+                            
+                            if (saveResponse.ok) {
+                                results.push({ word, success: true });
+                            } else {
+                                errors.push({ word, error: '儲存失敗' });
+                            }
+                            
+                        } catch (error) {
+                            errors.push({ word, error: error.message });
+                        }
+                    }
+                    
+                    result = {
+                        success: true,
+                        total: newWords.length,
+                        completed: results.length,
+                        failed: errors.length,
+                        results: results,
+                        errors: errors,
+                        total_wait_time: Math.round(totalWaitTime)
+                    };
+                    
                 } else {
-                    requestBody.api_key = getApiKey();
+                    // OpenRouter：仍然使用後端 API
+                    const requestBody = {
+                        words: newWords.join('\n'),
+                        api_provider: provider,
+                        openrouter_key: getOpenRouterKey()
+                    };
+                    
+                    const response = await fetch('/api/generate-batch', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody)
+                    });
+                    
+                    result = await response.json();
+                    
+                    if (!response.ok) {
+                        resultDiv.innerHTML += `<div class="batch-result-error">❌ ${result.error}</div>`;
+                        return;
+                    }
                 }
-                
-                const response = await fetch('/api/generate-batch', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestBody)
-                });
                 
                 progressFill.style.width = '100%';
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    resultDiv.innerHTML += `<div class="batch-result-error">❌ ${result.error}</div>`;
-                    return;
-                }
                 
                 // 顯示結果
                 let waitInfo = result.total_wait_time > 0 ? `（等待了 ${result.total_wait_time} 秒）` : '';
                 let html = `<div class="batch-result-success">
                     ✅ 完成！新增 ${result.completed} 個，失敗 ${result.failed} 個，跳過重複 ${duplicates.length} 個 ${waitInfo}
                 </div>`;
-                
-                // 更新速率限制狀態
-                updateRateLimitStatus();
                 
                 if (result.errors && result.errors.length > 0) {
                     html += `<div class="batch-result-error">
@@ -2160,6 +2268,116 @@
             await doGenerateWordInfo(japaneseWord, btn, originalText);
         }
         
+        // 前端速率限制器（使用用戶 IP）
+        const clientRateLimiter = {
+            calls: {},
+            maxCalls: 5,
+            period: 59000, // 59秒
+            
+            canCall(apiKey) {
+                const now = Date.now();
+                const key = apiKey.substring(0, 10);
+                
+                if (!this.calls[key]) {
+                    this.calls[key] = [];
+                }
+                
+                // 清除過期記錄
+                this.calls[key] = this.calls[key].filter(t => now - t < this.period);
+                
+                return this.calls[key].length < this.maxCalls;
+            },
+            
+            recordCall(apiKey) {
+                const key = apiKey.substring(0, 10);
+                if (!this.calls[key]) {
+                    this.calls[key] = [];
+                }
+                this.calls[key].push(Date.now());
+            },
+            
+            getWaitTime(apiKey) {
+                const now = Date.now();
+                const key = apiKey.substring(0, 10);
+                
+                if (!this.calls[key] || this.calls[key].length < this.maxCalls) {
+                    return 0;
+                }
+                
+                // 清除過期記錄
+                this.calls[key] = this.calls[key].filter(t => now - t < this.period);
+                
+                if (this.calls[key].length < this.maxCalls) {
+                    return 0;
+                }
+                
+                const oldestCall = Math.min(...this.calls[key]);
+                const waitTime = this.period - (now - oldestCall);
+                return Math.max(0, waitTime);
+            }
+        };
+        
+        // 生成單字資訊的 prompt
+        function generateWordPrompt(japaneseWord) {
+            return `請分析這個日文詞彙「${japaneseWord}」，並以 JSON 格式回傳以下資訊：
+1. part_of_speech: 詞性（如：名詞、動詞、形容詞、副詞等）
+2. sentence1: 一個常用的日文例句（使用這個詞）
+3. sentence2: 另一個常用的日文例句（使用這個詞）
+4. chinese_short: 繁體中文簡短解釋（1-3個字，只寫最核心的意思，例如：吃、喝、貓、漂亮）
+5. chinese_meaning: 繁體中文完整解釋
+6. jlpt_level: 用日文解釋這個詞的意思（像日日辭典一樣，純日文定義）
+7. kana_form: 這個詞的純假名寫法（平假名或片假名）
+8. kanji_form: 這個詞的漢字寫法（如果有的話，沒有就留空）
+9. common_form: 最常用的寫法是哪種？回答 "kanji"（漢字常用）、"hiragana"（平假名常用）、"katakana"（片假名常用，常見於副詞、擬聲詞、外來語等）或 "both"（兩者都常用）
+
+只回傳純 JSON，不要有其他文字或 markdown 格式。範例格式：
+{"part_of_speech": "動詞", "sentence1": "ご飯を食べる", "sentence2": "朝ご飯を食べました", "chinese_short": "吃", "chinese_meaning": "吃、進食", "jlpt_level": "食べ物を口に入れて、かんで、飲み込むこと。", "kana_form": "たべる", "kanji_form": "食べる", "common_form": "kanji"}`;
+        }
+        
+        // 直接從瀏覽器呼叫 Gemini API（使用用戶 IP）
+        async function callGeminiApiDirect(apiKey, prompt, modelPriority = ['gemini-3-pro-preview', 'gemini-3-flash-preview', 'gemini-2.5-flash', 'gemini-2.0-flash']) {
+            const GEMINI_API_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
+            
+            for (const modelName of modelPriority) {
+                try {
+                    const url = `${GEMINI_API_URL}/${modelName}:generateContent?key=${apiKey}`;
+                    
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            contents: [{
+                                parts: [{
+                                    text: prompt
+                                }]
+                            }],
+                            generationConfig: {
+                                temperature: 0.7
+                            }
+                        })
+                    });
+                    
+                    if (!response.ok) {
+                        const errorData = await response.json();
+                        throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    const text = data.candidates[0].content.parts[0].text.trim();
+                    
+                    return { text, model: modelName };
+                } catch (error) {
+                    console.log(`模型 ${modelName} 失敗:`, error.message);
+                    // 繼續嘗試下一個模型
+                    continue;
+                }
+            }
+            
+            throw new Error('所有 Gemini 模型都無法使用');
+        }
+        
         // 實際執行 AI 生成
         async function doGenerateWordInfo(japaneseWord, btn, originalText, retryCount = 0) {
             const MAX_RETRIES = 3;
@@ -2171,50 +2389,93 @@
                 const controller = new AbortController();
                 const timeoutId = setTimeout(() => controller.abort(), TIMEOUT_MS);
                 
-                // 根據提供者準備請求資料
-                const requestBody = { 
-                    japanese_word: japaneseWord,
-                    api_provider: provider
-                };
+                let result;
                 
-                if (provider === 'openrouter') {
-                    requestBody.openrouter_key = getOpenRouterKey();
+                // Gemini：直接從瀏覽器呼叫（使用用戶 IP）
+                if (provider === 'gemini') {
+                    const apiKeys = getApiKeys().filter(k => k.enabled).map(k => k.key);
+                    if (apiKeys.length === 0) {
+                        throw new Error('請先設定 Gemini API Key');
+                    }
+                    
+                    // 選擇第一個可用的 API Key
+                    let selectedKey = null;
+                    for (const key of apiKeys) {
+                        if (clientRateLimiter.canCall(key)) {
+                            selectedKey = key;
+                            break;
+                        }
+                    }
+                    
+                    if (!selectedKey) {
+                        // 所有 key 都在冷卻中，找出最短等待時間
+                        let minWait = Infinity;
+                        for (const key of apiKeys) {
+                            const wait = clientRateLimiter.getWaitTime(key);
+                            if (wait < minWait) {
+                                minWait = wait;
+                                selectedKey = key;
+                            }
+                        }
+                        
+                        if (minWait > 0 && retryCount < MAX_RETRIES) {
+                            btn.textContent = `⏳ 等待 ${Math.ceil(minWait / 1000)}秒... (重試 ${retryCount + 1}/${MAX_RETRIES})`;
+                            await new Promise(resolve => setTimeout(resolve, minWait));
+                            return doGenerateWordInfo(japaneseWord, btn, originalText, retryCount + 1);
+                        }
+                        
+                        throw new Error(`所有 API Key 都在冷卻中，請等待 ${Math.ceil(minWait / 1000)} 秒`);
+                    }
+                    
+                    // 記錄呼叫
+                    clientRateLimiter.recordCall(selectedKey);
+                    
+                    // 生成 prompt
+                    const prompt = generateWordPrompt(japaneseWord);
+                    
+                    // 直接呼叫 Gemini API（從瀏覽器發出，使用用戶 IP）
+                    const geminiResult = await callGeminiApiDirect(selectedKey, prompt);
+                    
+                    // 解析 JSON 回應
+                    let resultText = geminiResult.text;
+                    if (resultText.startsWith('```')) {
+                        const lines = resultText.split('\n');
+                        resultText = lines.slice(1, -1).join('\n');
+                    }
+                    
+                    result = JSON.parse(resultText);
+                    result.japanese_word = japaneseWord;
+                    result.model_used = `Gemini: ${geminiResult.model} (用戶 IP)`;
+                    if (!result.kana_form) result.kana_form = '';
+                    if (!result.kanji_form) result.kanji_form = '';
+                    if (!result.common_form) result.common_form = 'kanji';
+                    
                 } else {
-                    requestBody.api_key = getApiKey();
-                }
-                
-                const response = await fetch('/api/generate', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(requestBody),
-                    signal: controller.signal
-                });
-                
-                clearTimeout(timeoutId);
-                
-                const result = await response.json();
-                
-                if (!response.ok) {
-                    if (result.rate_limited && retryCount < MAX_RETRIES && provider === 'gemini') {
-                        // 速率限制，等待後自動重試（僅 Gemini）
-                        const waitTime = Math.ceil(result.wait_time);
-                        btn.textContent = `⏳ 等待 ${waitTime}秒... (重試 ${retryCount + 1}/${MAX_RETRIES})`;
-                        
-                        await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
-                        
-                        // 重試
-                        btn.textContent = '⏳ 生成中...';
-                        await doGenerateWordInfo(japaneseWord, btn, originalText, retryCount + 1);
+                    // OpenRouter：仍然使用後端 API
+                    const requestBody = { 
+                        japanese_word: japaneseWord,
+                        api_provider: provider,
+                        openrouter_key: getOpenRouterKey()
+                    };
+                    
+                    const response = await fetch('/api/generate', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(requestBody),
+                        signal: controller.signal
+                    });
+                    
+                    clearTimeout(timeoutId);
+                    
+                    result = await response.json();
+                    
+                    if (!response.ok) {
+                        alert('生成失敗：' + result.error);
                         return;
                     }
-                    alert('生成失敗：' + result.error);
-                    return;
                 }
                 
-                // 更新速率限制狀態（僅 Gemini）
-                if (provider === 'gemini') {
-                    updateRateLimitStatus();
-                }
+                clearTimeout(timeoutId);
                 
                 // 填入生成的資料
                 document.getElementById('part_of_speech').value = result.part_of_speech || '';
@@ -2238,6 +2499,18 @@
             } catch (error) {
                 if (error.name === 'AbortError') {
                     alert('生成超時，請稍後再試');
+                } else if (error.message.includes('冷卻') && retryCount < MAX_RETRIES) {
+                    // 速率限制，等待後自動重試
+                    const waitMatch = error.message.match(/(\d+)/);
+                    const waitTime = waitMatch ? parseInt(waitMatch[1]) : 60;
+                    btn.textContent = `⏳ 等待 ${waitTime}秒... (重試 ${retryCount + 1}/${MAX_RETRIES})`;
+                    
+                    await new Promise(resolve => setTimeout(resolve, waitTime * 1000));
+                    
+                    // 重試
+                    btn.textContent = '⏳ 生成中...';
+                    await doGenerateWordInfo(japaneseWord, btn, originalText, retryCount + 1);
+                    return;
                 } else {
                     alert('生成失敗：' + error.message);
                 }
