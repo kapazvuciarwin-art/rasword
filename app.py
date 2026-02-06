@@ -28,6 +28,11 @@ OPENROUTER_FREE_MODELS = [
     "microsoft/phi-3-mini-128k-instruct:free",
 ]
 
+# Groq API（OpenAI 相容介面）
+GROQ_API_URL = "https://api.groq.com/openai/v1/chat/completions"
+# 預設 Groq 模型，可在前端自訂
+DEFAULT_GROQ_MODEL = os.getenv("GROQ_DEFAULT_MODEL", "llama-3.3-70b-versatile")
+
 app = Flask(__name__)
 
 # API 速率限制器
@@ -177,6 +182,8 @@ def init_db():
         conn.execute('ALTER TABLE words ADD COLUMN typing_wrong INTEGER DEFAULT 0')
     if 'typing_next_review' not in columns:
         conn.execute('ALTER TABLE words ADD COLUMN typing_next_review TEXT')
+    if 'source' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN source TEXT DEFAULT "manual"')
     
     conn.commit()
     conn.close()
@@ -204,13 +211,14 @@ def add_word():
             return jsonify({'success': False, 'error': '日文詞不能為空'}), 400
         
         conn = get_db()
+        source = data.get('source', 'manual')  # manual, batch, transcript
         conn.execute('''
-            INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (japanese_word, data.get('part_of_speech', ''), data.get('sentence1', ''), 
               data.get('sentence2', ''), data.get('chinese_meaning', ''), data.get('chinese_short', ''), 
               data.get('jlpt_level', ''), data.get('kana_form', ''), data.get('kanji_form', ''),
-              data.get('common_form', 'kanji')))
+              data.get('common_form', 'kanji'), source))
         conn.commit()
         conn.close()
         return jsonify({'success': True})
@@ -224,13 +232,14 @@ def add_words_batch():
     words = data.get('words', [])
     conn = get_db()
     for word in words:
+        source = word.get('source', 'batch')
         conn.execute('''
-            INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (word['japanese_word'], word['part_of_speech'], word['sentence1'],
               word['sentence2'], word['chinese_meaning'], word.get('chinese_short', ''), 
               word['jlpt_level'], word.get('kana_form', ''), word.get('kanji_form', ''),
-              word.get('common_form', 'kanji')))
+              word.get('common_form', 'kanji'), source))
     conn.commit()
     conn.close()
     return jsonify({'success': True, 'count': len(words)})
@@ -557,6 +566,42 @@ def call_openrouter_api(api_key, prompt, model=None):
     
     raise Exception(f"所有模型都失敗了。最後錯誤: {last_error}")
 
+
+def call_groq_api(api_key, prompt, model_name=None):
+    """
+    呼叫 Groq Chat Completions API（OpenAI 相容）。
+    目前只用一個模型（可由前端或環境變數決定）。
+    """
+    if not api_key:
+        raise ValueError("缺少 Groq API Key")
+    model = (model_name or DEFAULT_GROQ_MODEL or "").strip()
+    if not model:
+        raise ValueError("Groq 模型名稱未設定")
+
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "model": model,
+        "messages": [{"role": "user", "content": prompt}],
+        "temperature": 0.7,
+    }
+    r = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=60)
+    if r.status_code != 200:
+        try:
+            err_json = r.json()
+            msg = err_json.get("error", {}).get("message") or r.text
+        except Exception:
+            msg = r.text
+        raise RuntimeError(f"Groq API 錯誤（HTTP {r.status_code}）: {msg}")
+    data = r.json()
+    try:
+        text = data["choices"][0]["message"]["content"]
+    except Exception as e:
+        raise RuntimeError(f"Groq 回應格式錯誤: {e}")
+    return (text or "").strip(), model
+
 def generate_word_prompt(japanese_word):
     """生成單字資訊的 prompt"""
     return f"""請分析這個日文詞彙「{japanese_word}」，並以 JSON 格式回傳以下資訊：
@@ -612,9 +657,11 @@ def generate_word_info():
     data = request.json
     japanese_word = data.get('japanese_word', '').strip()
     custom_api_keys = data.get('api_key', '').strip()
-    api_provider = data.get('api_provider', 'gemini')  # 'gemini' 或 'openrouter'
+    api_provider = data.get('api_provider', 'gemini')  # 'gemini'、'openrouter'、'groq'
     openrouter_key = data.get('openrouter_key', '').strip()
     openrouter_model = data.get('openrouter_model', '').strip()
+    groq_key = data.get('groq_key', '').strip()
+    groq_model = data.get('groq_model', '').strip()
     
     if not japanese_word:
         return jsonify({'error': '請輸入日文詞'}), 400
@@ -648,6 +695,28 @@ def generate_word_info():
             return jsonify({'error': f'AI 回應格式錯誤: {str(e)}', 'raw': result_text}), 500
         except Exception as e:
             return jsonify({'error': f'生成失敗: {str(e)}'}), 500
+    
+    # 使用 Groq API
+    if api_provider == 'groq':
+        if not groq_key:
+            return jsonify({'error': '請設定 Groq API Key'}), 400
+        try:
+            result_text, used_model = call_groq_api(groq_key, prompt, groq_model or None)
+            # 清理可能的 markdown 格式
+            if result_text.startswith('```'):
+                lines = result_text.split('\n')
+                result_text = '\n'.join(lines[1:-1])
+            result = json.loads(result_text)
+            result['japanese_word'] = japanese_word
+            result['model_used'] = f"Groq: {used_model}"
+            result.setdefault('kana_form', '')
+            result.setdefault('kanji_form', '')
+            result.setdefault('common_form', 'kanji')
+            return jsonify(result)
+        except json.JSONDecodeError as e:
+            return jsonify({'error': f'Groq 回應 JSON 解析錯誤: {str(e)}', 'raw': result_text}), 500
+        except Exception as e:
+            return jsonify({'error': f'Groq 生成失敗: {str(e)}'}), 500
     
     # 使用 Gemini API（原有邏輯）
     api_key, all_keys = get_best_api_key(custom_api_keys)
@@ -722,9 +791,11 @@ def generate_batch():
     data = request.json
     words_text = data.get('words', '').strip()
     custom_api_keys = data.get('api_key', '').strip()
-    api_provider = data.get('api_provider', 'gemini')  # 'gemini' 或 'openrouter'
+    api_provider = data.get('api_provider', 'gemini')  # 'gemini'、'openrouter'、'groq'
     openrouter_key = data.get('openrouter_key', '').strip()
     openrouter_model = data.get('openrouter_model', '').strip()
+    groq_key = data.get('groq_key', '').strip()
+    groq_model = data.get('groq_model', '').strip()
     
     if not words_text:
         return jsonify({'error': '請輸入要生成的詞彙'}), 400
@@ -762,13 +833,13 @@ def generate_batch():
                 
                 # 儲存到資料庫
                 conn.execute('''
-                    INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (japanese_word, result.get('part_of_speech', ''), result.get('sentence1', ''),
                       result.get('sentence2', ''), result.get('chinese_meaning', ''),
                       result.get('chinese_short', ''), result.get('jlpt_level', ''),
                       result.get('kana_form', ''), result.get('kanji_form', ''),
-                      result.get('common_form', 'kanji')))
+                      result.get('common_form', 'kanji'), 'batch_ai'))
                 
                 results.append({'word': japanese_word, 'success': True})
                 
@@ -789,6 +860,57 @@ def generate_batch():
             'errors': errors,
             'total_wait_time': 0,
             'model_used': used_model
+        })
+    
+    # 使用 Groq API：逐個詞呼叫，同步儲存
+    if api_provider == 'groq':
+        if not groq_key:
+            return jsonify({'error': '請設定 Groq API Key'}), 400
+        conn = get_db()
+        used_model = None
+        for japanese_word in word_list:
+            try:
+                prompt = generate_word_prompt(japanese_word)
+                result_text, used_model = call_groq_api(groq_key, prompt, groq_model or None)
+                if result_text.startswith('```'):
+                    lines = result_text.split('\n')
+                    result_text = '\n'.join(lines[1:-1])
+                result = json.loads(result_text)
+                conn.execute(
+                    '''
+                    INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    ''',
+                    (
+                        japanese_word,
+                        result.get('part_of_speech', ''),
+                        result.get('sentence1', ''),
+                        result.get('sentence2', ''),
+                        result.get('chinese_meaning', ''),
+                        result.get('chinese_short', ''),
+                        result.get('jlpt_level', ''),
+                        result.get('kana_form', ''),
+                        result.get('kanji_form', ''),
+                        result.get('common_form', 'kanji'),
+                        'batch_ai',
+                    ),
+                )
+                results.append({'word': japanese_word, 'success': True})
+            except json.JSONDecodeError as e:
+                errors.append({'word': japanese_word, 'error': f'Groq JSON 解析錯誤: {str(e)}'})
+            except Exception as e:
+                errors.append({'word': japanese_word, 'error': f'Groq 生成失敗: {str(e)}'})
+        conn.commit()
+        conn.close()
+        return jsonify({
+            'success': True,
+            'total': len(word_list),
+            'completed': len(results),
+            'failed': len(errors),
+            'results': results,
+            'errors': errors,
+            'total_wait_time': 0,
+            'model_used': used_model,
         })
     
     # 使用 Gemini API（原有邏輯）
@@ -869,13 +991,13 @@ def generate_batch():
                 
                 # 儲存到資料庫
                 conn.execute('''
-                    INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form, source)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (japanese_word, result.get('part_of_speech', ''), result.get('sentence1', ''),
                       result.get('sentence2', ''), result.get('chinese_meaning', ''),
                       result.get('chinese_short', ''), result.get('jlpt_level', ''),
                       result.get('kana_form', ''), result.get('kanji_form', ''),
-                      result.get('common_form', 'kanji')))
+                      result.get('common_form', 'kanji'), 'batch_ai'))
                 
                 results.append({'word': japanese_word, 'success': True})
                 

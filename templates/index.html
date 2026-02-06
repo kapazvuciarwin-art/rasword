@@ -576,6 +576,55 @@
             color: #666;
         }
         
+        .source-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+        .source-badge.source-manual {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+        .source-badge.source-batch {
+            background: #f3e5f5;
+            color: #7b1fa2;
+        }
+        .source-badge.source-batch_ai {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+        .source-badge.source-transcript {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+        
+        .word-detail-row {
+            background: #f8f9fa;
+        }
+        .word-detail-content {
+            padding: 15px;
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+        }
+        .detail-item {
+            padding: 8px;
+            background: white;
+            border-radius: 6px;
+            border-left: 3px solid #667eea;
+        }
+        .detail-item.full-width {
+            grid-column: 1 / -1;
+        }
+        .detail-item strong {
+            color: #555;
+            margin-right: 6px;
+        }
+        
         /* 練習區域樣式 */
         .quiz-section {
             text-align: center;
@@ -983,6 +1032,13 @@
                                 <small>多種模型，付費使用</small>
                             </span>
                         </label>
+                        <label class="provider-option">
+                            <input type="radio" name="api_provider" value="groq" onchange="switchApiProvider('groq')">
+                            <span class="provider-label">
+                                <strong>Groq</strong>
+                                <small>OpenAI 相容，高速 Llama3 模型</small>
+                            </span>
+                        </label>
                     </div>
                 </div>
                 
@@ -1045,6 +1101,35 @@
                     </div>
                 </div>
                 
+                <!-- Groq 設定區域 -->
+                <div id="groq-settings" class="api-settings-area" style="display: none;">
+                    <h3>🔑 Groq API 設定</h3>
+                    <p class="settings-hint">使用 Groq 的 OpenAI 相容端點，支援 Llama3 等高速模型。</p>
+                    <p class="settings-hint">取得 API Key：<a href="https://console.groq.com/keys" target="_blank">https://console.groq.com/keys</a></p>
+                    
+                    <div class="add-api-key-section">
+                        <div class="form-group">
+                            <label>Groq API Key</label>
+                            <div style="display: flex; gap: 10px;">
+                                <input type="password" id="groq_api_key" placeholder="gsk_..." style="flex: 1;">
+                                <button class="btn btn-primary" onclick="saveGroqSettings()">💾 儲存</button>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>Groq 模型（選填）</label>
+                            <input type="text" id="groq_model" placeholder="預設：llama-3.3-70b-versatile">
+                        </div>
+                    </div>
+                    
+                    <div id="groq-status" class="api-status"></div>
+                    
+                    <div class="rate-limit-info">
+                        <h3>💡 Groq 說明</h3>
+                        <p>• 使用 OpenAI 相容 Chat Completions 介面</p>
+                        <p>• 建議模型：llama-3.3-70b-versatile 或最新 Llama3.x</p>
+                    </div>
+                </div>
+                
                 <div class="api-status" id="api-status"></div>
             </div>
         </div>
@@ -1059,6 +1144,7 @@
         document.addEventListener('DOMContentLoaded', function() {
             loadApiKeysList();
             loadOpenRouterSettings();
+            loadGroqSettings();
             // 遷移舊的單一 API Key
             const oldKey = localStorage.getItem('custom_gemini_api_key');
             if (oldKey && !getApiKeys().length) {
@@ -1069,7 +1155,8 @@
             }
             // 載入 API 提供者設定
             const savedProvider = localStorage.getItem('api_provider') || 'gemini';
-            document.querySelector(`input[name="api_provider"][value="${savedProvider}"]`).checked = true;
+            const radio = document.querySelector(`input[name="api_provider"][value="${savedProvider}"]`) || document.querySelector('input[name="api_provider"][value="gemini"]');
+            if (radio) radio.checked = true;
             switchApiProvider(savedProvider);
         });
         
@@ -1079,13 +1166,21 @@
             
             const geminiSettings = document.getElementById('gemini-settings');
             const openrouterSettings = document.getElementById('openrouter-settings');
+            const groqSettings = document.getElementById('groq-settings');
             
             if (provider === 'gemini') {
                 geminiSettings.style.display = 'block';
                 openrouterSettings.style.display = 'none';
-            } else {
+                if (groqSettings) groqSettings.style.display = 'none';
+            } else if (provider === 'openrouter') {
                 geminiSettings.style.display = 'none';
                 openrouterSettings.style.display = 'block';
+                if (groqSettings) groqSettings.style.display = 'none';
+            } else {
+                // groq
+                geminiSettings.style.display = 'none';
+                openrouterSettings.style.display = 'none';
+                if (groqSettings) groqSettings.style.display = 'block';
             }
         }
         
@@ -1122,6 +1217,45 @@
             
             if (key) {
                 document.getElementById('openrouter_api_key').value = key;
+            }
+        }
+        
+        // Groq 設定
+        function getGroqKey() {
+            return localStorage.getItem('groq_api_key') || '';
+        }
+        
+        function getGroqModel() {
+            return localStorage.getItem('groq_model') || 'llama-3.3-70b-versatile';
+        }
+        
+        function saveGroqSettings() {
+            const key = document.getElementById('groq_api_key').value.trim();
+            const model = document.getElementById('groq_model').value.trim();
+            
+            if (!key) {
+                alert('請輸入 Groq API Key');
+                return;
+            }
+            localStorage.setItem('groq_api_key', key);
+            if (model) {
+                localStorage.setItem('groq_model', model);
+            } else {
+                localStorage.removeItem('groq_model');
+            }
+            const status = document.getElementById('groq-status');
+            status.className = 'api-status success';
+            status.textContent = '✅ Groq 設定已儲存！';
+        }
+        
+        function loadGroqSettings() {
+            const key = getGroqKey();
+            const model = localStorage.getItem('groq_model') || '';
+            if (key && document.getElementById('groq_api_key')) {
+                document.getElementById('groq_api_key').value = key;
+            }
+            if (document.getElementById('groq_model')) {
+                document.getElementById('groq_model').value = model;
             }
         }
         
@@ -1274,6 +1408,21 @@
                 return;
             }
             
+            // Groq 模式：顯示是否已設定 Key（不做前端限流）
+            if (provider === 'groq') {
+                if (statusEl) {
+                    const hasKey = getGroqKey() ? true : false;
+                    if (hasKey) {
+                        statusEl.className = 'rate-limit-status';
+                        statusEl.textContent = '⚡ Groq';
+                    } else {
+                        statusEl.className = 'rate-limit-status warning';
+                        statusEl.textContent = '⚠️ 需設定 Key';
+                    }
+                }
+                return;
+            }
+            
             // Gemini 模式：使用前端速率限制器（用戶 IP）
             if (statusEl) {
                 const apiKeys = getApiKeys().filter(k => k.enabled).map(k => k.key);
@@ -1396,7 +1545,8 @@
                 sentence2: document.getElementById('sentence2').value,
                 chinese_short: document.getElementById('chinese_short').value,
                 chinese_meaning: document.getElementById('chinese_meaning').value,
-                jlpt_level: document.getElementById('jlpt_level').value
+                jlpt_level: document.getElementById('jlpt_level').value,
+                source: 'manual'
             };
             
             try {
@@ -1576,7 +1726,8 @@
                                     sentence2: wordData.sentence2 || '',
                                     chinese_short: wordData.chinese_short || '',
                                     chinese_meaning: wordData.chinese_meaning || '',
-                                    jlpt_level: wordData.jlpt_level || ''
+                                    jlpt_level: wordData.jlpt_level || '',
+                                    source: 'batch_ai'
                                 })
                             });
                             
@@ -1602,12 +1753,17 @@
                     };
                     
                 } else {
-                    // OpenRouter：仍然使用後端 API
+                    // 透過後端（OpenRouter 或 Groq）
                     const requestBody = {
                         words: newWords.join('\n'),
-                        api_provider: provider,
-                        openrouter_key: getOpenRouterKey()
+                        api_provider: provider
                     };
+                    if (provider === 'openrouter') {
+                        requestBody.openrouter_key = getOpenRouterKey();
+                    } else if (provider === 'groq') {
+                        requestBody.groq_key = getGroqKey();
+                        requestBody.groq_model = getGroqModel();
+                    }
                     
                     const response = await fetch('/api/generate-batch', {
                         method: 'POST',
@@ -1684,7 +1840,8 @@
                         sentence2: parts[6]?.trim() || '',
                         chinese_short: parts[7]?.trim() || '',
                         chinese_meaning: parts[8]?.trim() || '',
-                        jlpt_level: parts[9]?.trim() || ''
+                        jlpt_level: parts[9]?.trim() || '',
+                        source: 'batch'
                     });
                 }
             }
@@ -1974,6 +2131,13 @@
                     'both': '兩者'
                 };
                 
+                const sourceText = {
+                    'manual': '單次輸入',
+                    'batch': '批次輸入',
+                    'batch_ai': '批次 AI 生成',
+                    'transcript': '逐字稿輸入'
+                };
+                
                 let tableHtml = `
                     <table class="word-table">
                         <thead>
@@ -1981,6 +2145,7 @@
                                 <th>日文詞</th>
                                 <th>假名</th>
                                 <th>簡短中文</th>
+                                <th>來源</th>
                                 <th>選擇題</th>
                                 <th>打字</th>
                                 <th>操作</th>
@@ -1992,15 +2157,38 @@
                 for (const word of words) {
                     const quizStats = `✓${word.quiz_correct || 0} ✗${word.quiz_wrong || 0}`;
                     const typingStats = `✓${word.typing_correct || 0} ✗${word.typing_wrong || 0}`;
+                    const source = word.source || 'manual';
+                    const sourceLabel = sourceText[source] || source;
                     tableHtml += `
-                        <tr>
-                            <td>${word.japanese_word}</td>
+                        <tr class="word-row" data-word-id="${word.id}">
+                            <td><strong>${word.japanese_word}</strong></td>
                             <td>${word.kana_form || '-'}</td>
                             <td>${word.chinese_short || '-'}</td>
+                            <td><span class="source-badge source-${source}">${sourceLabel}</span></td>
                             <td class="stats-cell">${quizStats}</td>
                             <td class="stats-cell">${typingStats}</td>
                             <td>
+                                <button class="btn btn-secondary btn-small" onclick="toggleWordDetail(${word.id})" id="detail-btn-${word.id}">詳情</button>
                                 <button class="btn btn-danger delete-btn" onclick="deleteWord(${word.id})">刪除</button>
+                            </td>
+                        </tr>
+                        <tr class="word-detail-row" id="detail-row-${word.id}" style="display: none;">
+                            <td colspan="7">
+                                <div class="word-detail-content">
+                                    <div class="detail-grid">
+                                        <div class="detail-item"><strong>日文詞：</strong>${word.japanese_word || '-'}</div>
+                                        <div class="detail-item"><strong>假名寫法：</strong>${word.kana_form || '-'}</div>
+                                        <div class="detail-item"><strong>漢字寫法：</strong>${word.kanji_form || '-'}</div>
+                                        <div class="detail-item"><strong>常用寫法：</strong>${commonFormText[word.common_form] || word.common_form || '-'}</div>
+                                        <div class="detail-item"><strong>詞性：</strong>${word.part_of_speech || '-'}</div>
+                                        <div class="detail-item"><strong>簡短中文：</strong>${word.chinese_short || '-'}</div>
+                                        <div class="detail-item full-width"><strong>完整中文：</strong>${word.chinese_meaning || '-'}</div>
+                                        <div class="detail-item full-width"><strong>常用短句1：</strong>${word.sentence1 || '-'}</div>
+                                        <div class="detail-item full-width"><strong>常用短句2：</strong>${word.sentence2 || '-'}</div>
+                                        <div class="detail-item full-width"><strong>日文解釋：</strong>${word.jlpt_level || '-'}</div>
+                                        <div class="detail-item"><strong>來源：</strong><span class="source-badge source-${source}">${sourceLabel}</span></div>
+                                    </div>
+                                </div>
                             </td>
                         </tr>
                     `;
@@ -2011,6 +2199,19 @@
                 
             } catch (error) {
                 container.innerHTML = `<p>載入失敗：${error.message}</p>`;
+            }
+        }
+        
+        // 切換單字詳情顯示
+        function toggleWordDetail(id) {
+            const detailRow = document.getElementById(`detail-row-${id}`);
+            const detailBtn = document.getElementById(`detail-btn-${id}`);
+            if (detailRow.style.display === 'none') {
+                detailRow.style.display = 'table-row';
+                detailBtn.textContent = '收起';
+            } else {
+                detailRow.style.display = 'none';
+                detailBtn.textContent = '詳情';
             }
         }
         
@@ -2451,12 +2652,17 @@
                     if (!result.common_form) result.common_form = 'kanji';
                     
                 } else {
-                    // OpenRouter：仍然使用後端 API
+                    // 透過後端（OpenRouter 或 Groq）
                     const requestBody = { 
                         japanese_word: japaneseWord,
-                        api_provider: provider,
-                        openrouter_key: getOpenRouterKey()
+                        api_provider: provider
                     };
+                    if (provider === 'openrouter') {
+                        requestBody.openrouter_key = getOpenRouterKey();
+                    } else if (provider === 'groq') {
+                        requestBody.groq_key = getGroqKey();
+                        requestBody.groq_model = getGroqModel();
+                    }
                     
                     const response = await fetch('/api/generate', {
                         method: 'POST',
