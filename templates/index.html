@@ -226,6 +226,12 @@
             margin-top: 5px;
         }
         
+        #japanese-word-actions .model-info,
+        #japanese-word-actions .duplicate-warning {
+            flex-basis: 100%;
+            margin-top: 6px;
+        }
+        
         .japanese-definition {
             background: #e8f4f8;
             padding: 12px 20px;
@@ -858,6 +864,27 @@
             color: #2c5282;
         }
         
+        .toast {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            padding: 12px 24px;
+            border-radius: 8px;
+            color: #fff;
+            font-weight: 600;
+            z-index: 10001;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+            animation: toast-in 0.25s ease;
+        }
+        .toast.success { background: #22c55e; }
+        .toast.error { background: #dc3545; }
+        .toast.info { background: #667eea; }
+        @keyframes toast-in {
+            from { opacity: 0; transform: translateX(-50%) translateY(-10px); }
+            to { opacity: 1; transform: translateX(-50%) translateY(0); }
+        }
+        
         /* 響應式設計 */
         @media (max-width: 600px) {
             .options-grid {
@@ -879,6 +906,7 @@
     </style>
 </head>
 <body>
+    <div id="toast" class="toast" style="display: none;" role="status" aria-live="polite"></div>
     <div class="container">
         <h1>📚 日文單字練習</h1>
         
@@ -897,8 +925,10 @@
                 <form id="word-form">
                     <div class="form-group">
                         <label>日文詞 *</label>
-                        <div style="display: flex; gap: 10px;">
-                            <input type="text" id="japanese_word" required placeholder="例：食べる" style="flex: 1;">
+                        <div style="margin-bottom: 8px;">
+                            <input type="text" id="japanese_word" required placeholder="例：食べる" style="width: 100%; box-sizing: border-box;">
+                        </div>
+                        <div id="japanese-word-actions" style="display: flex; gap: 10px; align-items: center; flex-wrap: wrap;">
                             <button type="button" class="btn btn-ai" onclick="generateWordInfo()">🤖 AI 生成</button>
                             <span class="rate-limit-status" id="rate-limit-status"></span>
                         </div>
@@ -1526,6 +1556,26 @@
             }
         }
         
+        function showToast(msg, type) {
+            type = type || 'success';
+            const el = document.getElementById('toast');
+            el.textContent = msg;
+            el.className = 'toast ' + type;
+            el.style.display = 'block';
+            clearTimeout(showToast._tid);
+            showToast._tid = setTimeout(() => {
+                el.style.display = 'none';
+            }, 4000);
+        }
+        
+        // 日文詞輸入框按 Enter 觸發 AI 生成（不觸發表單送出）
+        document.getElementById('word-form').addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && e.target.id === 'japanese_word') {
+                e.preventDefault();
+                generateWordInfo();
+            }
+        });
+        
         // 新增單字表單
         document.getElementById('word-form').addEventListener('submit', async (e) => {
             e.preventDefault();
@@ -1559,7 +1609,7 @@
                 const result = await response.json();
                 
                 if (response.ok && result.success) {
-                    alert('單字新增成功！');
+                    showToast('單字新增成功！', 'success');
                     e.target.reset();
                     document.getElementById('common_form').value = 'kanji';
                     // 移除可能存在的警告和模型資訊
