@@ -2040,10 +2040,11 @@
                 btn.classList.add('correct');
                 
                 // 記錄答對（包含提示次數）
+                // 注意：答對後自動顯示的提示不計入 hintCount
                 recordAnswer(q.id, 'quiz', true, hintCount);
                 
-                // 自動顯示所有提示
-                showAllHints();
+                // 自動顯示所有提示（僅供學習，不計入提示次數）
+                showAllHints(false);  // false 表示不計入提示次數
                 
                 resultArea.innerHTML = `
                     <div class="result-message correct">🎉 答對了！</div>
@@ -2087,7 +2088,8 @@
         }
         
         // 顯示所有提示
-        function showAllHints() {
+        // countAsHint: 是否計入提示次數（答對後自動顯示時為 false）
+        function showAllHints(countAsHint = true) {
             const hintArea = document.getElementById('hint-area');
             const q = currentQuiz.question;
             
@@ -2097,9 +2099,9 @@
             if (q.sentence2) actualHintCount++;
             if (q.jlpt_level) actualHintCount++;
             
-            // 如果用戶還沒點擊過提示，自動顯示時也要計入提示次數
-            // 但最多計入實際顯示的提示數量
-            if (hintCount < actualHintCount) {
+            // 只有在需要計入提示次數時才更新 hintCount
+            // 答對後自動顯示的提示不計入（因為用戶已經答對了）
+            if (countAsHint && hintCount < actualHintCount) {
                 hintCount = actualHintCount;
             }
             
