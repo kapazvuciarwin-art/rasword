@@ -11,11 +11,28 @@
             padding: 0;
         }
         
+        :root {
+            --bg-primary: #1a1a1e;
+            --bg-secondary: #2d2d35;
+            --bg-tertiary: #3a3a45;
+            --text-primary: #e4e4e7;
+            --text-secondary: #a1a1aa;
+            --text-muted: #71717a;
+            --border-color: #3f3f46;
+            --accent-primary: #667eea;
+            --accent-secondary: #764ba2;
+            --success: #10b981;
+            --error: #ef4444;
+            --warning: #f59e0b;
+            --info: #3b82f6;
+        }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, #1a1a1e 0%, #2d2d35 100%);
             min-height: 100vh;
             padding: 20px;
+            color: var(--text-primary);
         }
         
         .container {
@@ -25,9 +42,9 @@
         
         h1 {
             text-align: center;
-            color: white;
+            color: var(--text-primary);
             margin-bottom: 30px;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.2);
+            text-shadow: 2px 2px 4px rgba(0,0,0,0.5);
         }
         
         .tabs {
@@ -45,21 +62,25 @@
             font-size: 16px;
             font-weight: bold;
             transition: all 0.3s;
-            background: rgba(255,255,255,0.3);
-            color: white;
+            background: rgba(255,255,255,0.1);
+            color: var(--text-secondary);
+        }
+        
+        .tab-btn:hover {
+            background: rgba(255,255,255,0.15);
         }
         
         .tab-btn.active {
-            background: white;
-            color: #667eea;
+            background: var(--bg-secondary);
+            color: var(--text-primary);
         }
         
         .tab-content {
             display: none;
-            background: white;
+            background: var(--bg-secondary);
             padding: 30px;
             border-radius: 0 0 15px 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
         }
         
         .tab-content.active {
@@ -68,7 +89,7 @@
         
         /* 輸入區域樣式 */
         .input-section h2 {
-            color: #333;
+            color: var(--text-primary);
             margin-bottom: 20px;
         }
         
@@ -79,22 +100,28 @@
         .form-group label {
             display: block;
             margin-bottom: 5px;
-            color: #555;
+            color: var(--text-secondary);
             font-weight: bold;
         }
         
         .form-group input, .form-group textarea, .form-group select {
             width: 100%;
             padding: 12px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid var(--border-color);
             border-radius: 8px;
             font-size: 16px;
             transition: border-color 0.3s;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
         }
         
         .form-group input:focus, .form-group textarea:focus, .form-group select:focus {
             outline: none;
-            border-color: #667eea;
+            border-color: var(--accent-primary);
+        }
+        
+        .form-group input::placeholder, .form-group textarea::placeholder {
+            color: var(--text-muted);
         }
         
         .form-row {
@@ -118,33 +145,50 @@
         }
         
         .btn-primary {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
             color: white;
         }
         
         .btn-primary:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.5);
         }
         
         .btn-secondary {
-            background: #6c757d;
-            color: white;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
+            border: 1px solid var(--border-color);
+        }
+        
+        .btn-secondary:hover {
+            background: var(--bg-primary);
         }
         
         .btn-success {
-            background: #28a745;
+            background: var(--success);
             color: white;
+        }
+        
+        .btn-success:hover {
+            background: #059669;
         }
         
         .btn-danger {
-            background: #dc3545;
+            background: var(--error);
             color: white;
         }
         
+        .btn-danger:hover {
+            background: #dc2626;
+        }
+        
         .btn-warning {
-            background: #ffc107;
-            color: #333;
+            background: var(--warning);
+            color: white;
+        }
+        
+        .btn-warning:hover {
+            background: #d97706;
         }
         
         .btn-ai {
@@ -155,11 +199,12 @@
         
         .btn-ai:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(0, 180, 219, 0.4);
+            box-shadow: 0 5px 15px rgba(0, 180, 219, 0.5);
         }
         
         .btn-ai:disabled {
-            background: #ccc;
+            background: var(--bg-tertiary);
+            color: var(--text-muted);
             cursor: not-allowed;
             transform: none;
         }
@@ -171,7 +216,7 @@
         
         .btn-info:hover {
             transform: translateY(-2px);
-            box-shadow: 0 5px 15px rgba(23, 162, 184, 0.4);
+            box-shadow: 0 5px 15px rgba(23, 162, 184, 0.5);
         }
         
         /* 設定頁面樣式 */
@@ -181,18 +226,18 @@
         }
         
         .settings-section h2 {
-            color: #333;
+            color: var(--text-primary);
             margin-bottom: 20px;
         }
         
         .settings-hint {
-            color: #666;
+            color: var(--text-secondary);
             font-size: 14px;
             margin-bottom: 15px;
         }
         
         .settings-hint a {
-            color: #667eea;
+            color: var(--accent-primary);
         }
         
         .api-status {
@@ -204,25 +249,28 @@
         
         .api-status.success {
             display: block;
-            background: #d4edda;
-            color: #155724;
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
         }
         
         .api-status.error {
             display: block;
-            background: #f8d7da;
-            color: #721c24;
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
         
         .api-status.info {
             display: block;
-            background: #d1ecf1;
-            color: #0c5460;
+            background: rgba(59, 130, 246, 0.2);
+            color: #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.3);
         }
         
         .model-info {
             font-size: 12px;
-            color: #888;
+            color: var(--text-muted);
             margin-top: 5px;
         }
         
@@ -233,20 +281,20 @@
         }
         
         .japanese-definition {
-            background: #e8f4f8;
+            background: rgba(59, 130, 246, 0.15);
             padding: 12px 20px;
             border-radius: 8px;
             font-size: 16px;
-            color: #2c5282;
+            color: #93c5fd;
             margin: 15px 0;
-            border-left: 4px solid #4299e1;
+            border-left: 4px solid #3b82f6;
         }
         
         /* 批次輸入區域 */
         .batch-area {
             margin-top: 30px;
             padding-top: 20px;
-            border-top: 2px dashed #e0e0e0;
+            border-top: 2px dashed var(--border-color);
         }
         
         .batch-area textarea {
@@ -255,43 +303,46 @@
         }
         
         .batch-hint {
-            background: #f8f9fa;
+            background: var(--bg-tertiary);
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 15px;
             font-size: 14px;
-            color: #666;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
         }
         
         .batch-hint code {
-            background: #e9ecef;
+            background: var(--bg-primary);
             padding: 2px 6px;
             border-radius: 4px;
+            color: var(--text-primary);
         }
         
         .batch-progress {
             margin-top: 15px;
             padding: 15px;
-            background: #f8f9fa;
+            background: var(--bg-tertiary);
             border-radius: 8px;
+            border: 1px solid var(--border-color);
         }
         
         .progress-text {
             margin-bottom: 10px;
-            color: #555;
+            color: var(--text-primary);
             font-weight: bold;
         }
         
         .progress-bar {
             height: 20px;
-            background: #e0e0e0;
+            background: var(--bg-primary);
             border-radius: 10px;
             overflow: hidden;
         }
         
         .progress-fill {
             height: 100%;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-secondary) 100%);
             width: 0%;
             transition: width 0.3s ease;
             border-radius: 10px;
@@ -302,18 +353,20 @@
         }
         
         .batch-result-success {
-            background: #d4edda;
-            color: #155724;
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 10px;
+            border: 1px solid rgba(16, 185, 129, 0.3);
         }
         
         .batch-result-error {
-            background: #f8d7da;
-            color: #721c24;
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
             padding: 15px;
             border-radius: 8px;
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
         
         .batch-result-error ul {
@@ -322,11 +375,12 @@
         }
         
         .batch-result-warning {
-            background: #fff3cd;
-            color: #856404;
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
             padding: 15px;
             border-radius: 8px;
             margin-bottom: 10px;
+            border: 1px solid rgba(245, 158, 11, 0.3);
         }
         
         .batch-result-warning ul {
@@ -335,12 +389,13 @@
         }
         
         .duplicate-warning {
-            background: #fff3cd;
-            color: #856404;
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
             padding: 12px 15px;
             border-radius: 8px;
             margin-top: 10px;
             font-size: 14px;
+            border: 1px solid rgba(245, 158, 11, 0.3);
         }
         
         .btn-small {
@@ -351,30 +406,32 @@
         
         .rate-limit-status {
             font-size: 12px;
-            color: #666;
+            color: var(--text-secondary);
             margin-left: 10px;
         }
         
         .rate-limit-status.warning {
-            color: #856404;
+            color: var(--warning);
         }
         
         .rate-limit-status.danger {
-            color: #dc3545;
+            color: var(--error);
         }
         
         .rate-limit-info {
-            background: #e9ecef;
+            background: var(--bg-tertiary);
             padding: 15px;
             border-radius: 8px;
             margin-top: 20px;
             font-size: 13px;
-            color: #555;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
         }
         
         .rate-limit-info h3 {
             margin: 0 0 10px 0;
             font-size: 14px;
+            color: var(--text-primary);
         }
         
         .rate-limit-info p {
@@ -390,15 +447,15 @@
             align-items: center;
             gap: 10px;
             padding: 12px 15px;
-            background: #f8f9fa;
+            background: var(--bg-tertiary);
             border-radius: 8px;
             margin-bottom: 10px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid var(--border-color);
         }
         
         .api-key-item.active {
-            border-color: #28a745;
-            background: #f0fff4;
+            border-color: var(--success);
+            background: rgba(16, 185, 129, 0.15);
         }
         
         .api-key-info {
@@ -407,68 +464,71 @@
         
         .api-key-name {
             font-weight: bold;
-            color: #333;
+            color: var(--text-primary);
         }
         
         .api-key-preview {
             font-family: monospace;
             font-size: 12px;
-            color: #666;
+            color: var(--text-secondary);
         }
         
         .api-key-status {
             font-size: 12px;
             padding: 4px 8px;
             border-radius: 12px;
-            background: #e9ecef;
+            background: var(--bg-tertiary);
+            color: var(--text-secondary);
         }
         
         .api-key-status.available {
-            background: #d4edda;
-            color: #155724;
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
         }
         
         .api-key-status.limited {
-            background: #fff3cd;
-            color: #856404;
+            background: rgba(245, 158, 11, 0.2);
+            color: #f59e0b;
         }
         
         .api-key-status.exhausted {
-            background: #f8d7da;
-            color: #721c24;
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
         }
         
         .add-api-key-section {
             padding: 20px;
-            background: #f8f9fa;
+            background: var(--bg-tertiary);
             border-radius: 8px;
             margin-bottom: 20px;
+            border: 1px solid var(--border-color);
         }
         
         .add-api-key-section h3 {
             margin: 0 0 15px 0;
-            color: #333;
+            color: var(--text-primary);
         }
         
         .no-api-keys {
             text-align: center;
             padding: 30px;
-            color: #666;
-            background: #f8f9fa;
+            color: var(--text-secondary);
+            background: var(--bg-tertiary);
             border-radius: 8px;
             margin-bottom: 20px;
+            border: 1px solid var(--border-color);
         }
         
         /* API 提供者選擇樣式 */
         .api-provider-section {
             margin-bottom: 25px;
             padding-bottom: 20px;
-            border-bottom: 2px solid #e0e0e0;
+            border-bottom: 2px solid var(--border-color);
         }
         
         .api-provider-section h3 {
             margin: 0 0 15px 0;
-            color: #333;
+            color: var(--text-primary);
         }
         
         .provider-toggle {
@@ -482,8 +542,8 @@
             align-items: flex-start;
             gap: 10px;
             padding: 15px 20px;
-            background: #f8f9fa;
-            border: 2px solid #e0e0e0;
+            background: var(--bg-tertiary);
+            border: 2px solid var(--border-color);
             border-radius: 10px;
             cursor: pointer;
             transition: all 0.3s;
@@ -492,8 +552,8 @@
         }
         
         .provider-option:hover {
-            border-color: #667eea;
-            background: #f0f4ff;
+            border-color: var(--accent-primary);
+            background: var(--bg-primary);
         }
         
         .provider-option input[type="radio"] {
@@ -504,12 +564,12 @@
         }
         
         .provider-option input[type="radio"]:checked + .provider-label {
-            color: #667eea;
+            color: var(--accent-primary);
         }
         
         .provider-option:has(input:checked) {
-            border-color: #667eea;
-            background: #f0f4ff;
+            border-color: var(--accent-primary);
+            background: rgba(102, 126, 234, 0.1);
         }
         
         .provider-label {
@@ -520,23 +580,25 @@
         
         .provider-label strong {
             font-size: 16px;
+            color: var(--text-primary);
         }
         
         .provider-label small {
-            color: #666;
+            color: var(--text-secondary);
             font-size: 13px;
         }
         
         .api-settings-area {
             margin-top: 20px;
             padding: 20px;
-            background: #fafafa;
+            background: var(--bg-tertiary);
             border-radius: 10px;
+            border: 1px solid var(--border-color);
         }
         
         .api-settings-area h3 {
             margin: 0 0 15px 0;
-            color: #333;
+            color: var(--text-primary);
         }
         
         /* 單字列表 */
@@ -546,7 +608,7 @@
         
         .word-list h3 {
             margin-bottom: 15px;
-            color: #333;
+            color: var(--text-primary);
         }
         
         .word-table {
@@ -558,17 +620,18 @@
         .word-table th, .word-table td {
             padding: 10px;
             text-align: left;
-            border-bottom: 1px solid #e0e0e0;
+            border-bottom: 1px solid var(--border-color);
+            color: var(--text-primary);
         }
         
         .word-table th {
-            background: #f8f9fa;
+            background: var(--bg-tertiary);
             font-weight: bold;
-            color: #555;
+            color: var(--text-secondary);
         }
         
         .word-table tr:hover {
-            background: #f8f9fa;
+            background: var(--bg-tertiary);
         }
         
         .delete-btn {
@@ -579,7 +642,7 @@
         .stats-cell {
             font-size: 12px;
             white-space: nowrap;
-            color: #666;
+            color: var(--text-secondary);
         }
         
         .source-badge {
@@ -590,24 +653,24 @@
             font-weight: 600;
         }
         .source-badge.source-manual {
-            background: #e3f2fd;
-            color: #1976d2;
+            background: rgba(59, 130, 246, 0.2);
+            color: #60a5fa;
         }
         .source-badge.source-batch {
-            background: #f3e5f5;
-            color: #7b1fa2;
+            background: rgba(167, 139, 250, 0.2);
+            color: #a78bfa;
         }
         .source-badge.source-batch_ai {
-            background: #e8f5e9;
-            color: #388e3c;
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
         }
         .source-badge.source-transcript {
-            background: #fff3e0;
-            color: #f57c00;
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
         }
         
         .word-detail-row {
-            background: #f8f9fa;
+            background: var(--bg-tertiary);
         }
         .word-detail-content {
             padding: 15px;
@@ -619,15 +682,15 @@
         }
         .detail-item {
             padding: 8px;
-            background: white;
+            background: var(--bg-primary);
             border-radius: 6px;
-            border-left: 3px solid #667eea;
+            border-left: 3px solid var(--accent-primary);
         }
         .detail-item.full-width {
             grid-column: 1 / -1;
         }
         .detail-item strong {
-            color: #555;
+            color: var(--text-secondary);
             margin-right: 6px;
         }
         
@@ -638,11 +701,12 @@
         
         .quiz-word {
             font-size: 48px;
-            color: #333;
+            color: var(--text-primary);
             margin: 30px 0;
             padding: 20px;
-            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            background: linear-gradient(135deg, var(--bg-tertiary) 0%, var(--bg-secondary) 100%);
             border-radius: 15px;
+            border: 1px solid var(--border-color);
         }
         
         .quiz-info {
@@ -653,11 +717,12 @@
         }
         
         .quiz-info span {
-            background: #e9ecef;
+            background: var(--bg-tertiary);
             padding: 8px 15px;
             border-radius: 20px;
             font-size: 14px;
-            color: #555;
+            color: var(--text-secondary);
+            border: 1px solid var(--border-color);
         }
         
         .hint-area {
@@ -666,45 +731,48 @@
         }
         
         .hint-text {
-            background: #fff3cd;
+            background: rgba(245, 158, 11, 0.2);
             padding: 15px;
             border-radius: 8px;
             margin: 10px 0;
-            color: #856404;
+            color: #fbbf24;
             font-size: 18px;
+            border: 1px solid rgba(245, 158, 11, 0.3);
         }
         
         .hint-text.hint-dictionary {
-            background: #e8f4f8;
-            color: #2c5282;
-            border-left: 4px solid #4299e1;
+            background: rgba(59, 130, 246, 0.15);
+            color: #93c5fd;
+            border-left: 4px solid #3b82f6;
         }
         
         .kana-hint-box {
-            background: linear-gradient(135deg, #e0f7fa 0%, #b2ebf2 100%);
+            background: linear-gradient(135deg, rgba(59, 130, 246, 0.15) 0%, rgba(59, 130, 246, 0.1) 100%);
             padding: 15px 20px;
             border-radius: 10px;
             margin: 15px 0;
-            border-left: 4px solid #00bcd4;
+            border-left: 4px solid #3b82f6;
+            border: 1px solid rgba(59, 130, 246, 0.2);
         }
         
         .kana-hint-box p {
             margin: 8px 0;
-            color: #006064;
+            color: #93c5fd;
         }
         
         .kana-text, .kanji-text {
             font-size: 20px;
             font-weight: bold;
             margin-left: 10px;
+            color: var(--text-primary);
         }
         
         .common-form-note {
             font-size: 14px;
-            color: #00838f !important;
+            color: #60a5fa !important;
             margin-top: 12px !important;
             padding-top: 10px;
-            border-top: 1px dashed #80deea;
+            border-top: 1px dashed rgba(59, 130, 246, 0.3);
         }
         
         .options-grid {
@@ -716,30 +784,31 @@
         
         .option-btn {
             padding: 15px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid var(--border-color);
             border-radius: 10px;
-            background: white;
+            background: var(--bg-tertiary);
             cursor: pointer;
             font-size: 16px;
             transition: all 0.3s;
             text-align: left;
+            color: var(--text-primary);
         }
         
         .option-btn:hover {
-            border-color: #667eea;
-            background: #f8f9fa;
+            border-color: var(--accent-primary);
+            background: var(--bg-primary);
         }
         
         .option-btn.correct {
-            border-color: #28a745;
-            background: #d4edda;
-            color: #155724;
+            border-color: var(--success);
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
         }
         
         .option-btn.wrong {
-            border-color: #dc3545;
-            background: #f8d7da;
-            color: #721c24;
+            border-color: var(--error);
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
         }
         
         .option-btn.disabled {
@@ -755,13 +824,15 @@
         }
         
         .result-message.correct {
-            background: #d4edda;
-            color: #155724;
+            background: rgba(16, 185, 129, 0.2);
+            color: #10b981;
+            border: 1px solid rgba(16, 185, 129, 0.3);
         }
         
         .result-message.wrong {
-            background: #f8d7da;
-            color: #721c24;
+            background: rgba(239, 68, 68, 0.2);
+            color: #ef4444;
+            border: 1px solid rgba(239, 68, 68, 0.3);
         }
         
         .detail-btn-area {
@@ -769,17 +840,17 @@
         }
         
         .chinese-detail {
-            background: #e8f5e9;
+            background: rgba(16, 185, 129, 0.15);
             padding: 15px 20px;
             border-radius: 10px;
             margin: 15px 0;
             text-align: left;
-            border-left: 4px solid #4caf50;
+            border-left: 4px solid var(--success);
         }
         
         .chinese-detail p {
             margin: 8px 0;
-            color: #2e7d32;
+            color: #34d399;
         }
         
         .quiz-controls {
@@ -793,7 +864,7 @@
         .no-words-message {
             text-align: center;
             padding: 40px;
-            color: #666;
+            color: var(--text-secondary);
         }
         
         .no-words-message p {
@@ -811,14 +882,16 @@
             padding: 15px 20px;
             font-size: 24px;
             text-align: center;
-            border: 3px solid #667eea;
+            border: 3px solid var(--accent-primary);
             border-radius: 10px;
             outline: none;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
         }
         
         .typing-input:focus {
-            border-color: #764ba2;
-            box-shadow: 0 0 10px rgba(102, 126, 234, 0.3);
+            border-color: var(--accent-secondary);
+            box-shadow: 0 0 10px rgba(102, 126, 234, 0.5);
         }
         
         .typing-hint-area {
@@ -840,15 +913,16 @@
             align-items: center;
             justify-content: center;
             font-size: 24px;
-            border: 2px solid #e0e0e0;
+            border: 2px solid var(--border-color);
             border-radius: 8px;
-            background: #f8f9fa;
+            background: var(--bg-tertiary);
+            color: var(--text-primary);
         }
         
         .hint-char.revealed {
-            background: #fff3cd;
-            border-color: #ffc107;
-            color: #856404;
+            background: rgba(245, 158, 11, 0.2);
+            border-color: var(--warning);
+            color: #fbbf24;
         }
         
         .hint-char.hidden {
@@ -856,12 +930,13 @@
         }
         
         .typing-chinese-hint {
-            background: #e8f4f8;
+            background: rgba(59, 130, 246, 0.15);
             padding: 10px 20px;
             border-radius: 8px;
             margin: 15px auto;
             display: inline-block;
-            color: #2c5282;
+            color: #93c5fd;
+            border: 1px solid rgba(59, 130, 246, 0.3);
         }
         
         .toast {
