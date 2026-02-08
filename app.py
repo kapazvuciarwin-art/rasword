@@ -346,14 +346,28 @@ def calculate_srs_weight(word, quiz_type):
     if quiz_type == 'quiz':
         correct = word['quiz_correct'] or 0
         wrong = word['quiz_wrong'] or 0
-        hint_count = word.get('quiz_hint_count') or 0
-        hint_sessions = word.get('quiz_hint_sessions') or 0
+        # sqlite3.Row 沒有 .get() 方法，使用 try-except
+        try:
+            hint_count = word['quiz_hint_count'] or 0
+        except (KeyError, IndexError):
+            hint_count = 0
+        try:
+            hint_sessions = word['quiz_hint_sessions'] or 0
+        except (KeyError, IndexError):
+            hint_sessions = 0
         next_review = word['quiz_next_review']
     else:  # typing
         correct = word['typing_correct'] or 0
         wrong = word['typing_wrong'] or 0
-        hint_count = word.get('typing_hint_count') or 0
-        hint_sessions = word.get('typing_hint_sessions') or 0
+        # sqlite3.Row 沒有 .get() 方法，使用 try-except
+        try:
+            hint_count = word['typing_hint_count'] or 0
+        except (KeyError, IndexError):
+            hint_count = 0
+        try:
+            hint_sessions = word['typing_hint_sessions'] or 0
+        except (KeyError, IndexError):
+            hint_sessions = 0
         next_review = word['typing_next_review']
     
     # 基礎權重
@@ -444,8 +458,14 @@ def record_answer():
         wrong = (word['quiz_wrong'] or 0) + (0 if is_correct else 1)
         
         # 更新提示統計
-        current_hint_count = (word.get('quiz_hint_count') or 0) + hint_count
-        current_hint_sessions = (word.get('quiz_hint_sessions') or 0) + (1 if hint_count > 0 else 0)
+        try:
+            current_hint_count = (word['quiz_hint_count'] or 0) + hint_count
+        except (KeyError, IndexError):
+            current_hint_count = hint_count
+        try:
+            current_hint_sessions = (word['quiz_hint_sessions'] or 0) + (1 if hint_count > 0 else 0)
+        except (KeyError, IndexError):
+            current_hint_sessions = (1 if hint_count > 0 else 0)
         
         next_review = calculate_next_review(correct, wrong, is_correct, hint_count).isoformat()
         
@@ -463,8 +483,14 @@ def record_answer():
         wrong = (word['typing_wrong'] or 0) + (0 if is_correct else 1)
         
         # 更新提示統計
-        current_hint_count = (word.get('typing_hint_count') or 0) + hint_count
-        current_hint_sessions = (word.get('typing_hint_sessions') or 0) + (1 if hint_count > 0 else 0)
+        try:
+            current_hint_count = (word['typing_hint_count'] or 0) + hint_count
+        except (KeyError, IndexError):
+            current_hint_count = hint_count
+        try:
+            current_hint_sessions = (word['typing_hint_sessions'] or 0) + (1 if hint_count > 0 else 0)
+        except (KeyError, IndexError):
+            current_hint_sessions = (1 if hint_count > 0 else 0)
         
         next_review = calculate_next_review(correct, wrong, is_correct, hint_count).isoformat()
         
