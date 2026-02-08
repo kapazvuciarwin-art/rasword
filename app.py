@@ -184,6 +184,15 @@ def init_db():
         conn.execute('ALTER TABLE words ADD COLUMN typing_next_review TEXT')
     if 'source' not in columns:
         conn.execute('ALTER TABLE words ADD COLUMN source TEXT DEFAULT "manual"')
+    # 提示次數欄位
+    if 'quiz_hint_count' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN quiz_hint_count INTEGER DEFAULT 0')
+    if 'quiz_hint_sessions' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN quiz_hint_sessions INTEGER DEFAULT 0')
+    if 'typing_hint_count' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN typing_hint_count INTEGER DEFAULT 0')
+    if 'typing_hint_sessions' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN typing_hint_sessions INTEGER DEFAULT 0')
     
     conn.commit()
     conn.close()
@@ -337,10 +346,14 @@ def calculate_srs_weight(word, quiz_type):
     if quiz_type == 'quiz':
         correct = word['quiz_correct'] or 0
         wrong = word['quiz_wrong'] or 0
+        hint_count = word.get('quiz_hint_count') or 0
+        hint_sessions = word.get('quiz_hint_sessions') or 0
         next_review = word['quiz_next_review']
     else:  # typing
         correct = word['typing_correct'] or 0
         wrong = word['typing_wrong'] or 0
+        hint_count = word.get('typing_hint_count') or 0
+        hint_sessions = word.get('typing_hint_sessions') or 0
         next_review = word['typing_next_review']
     
     # 基礎權重
@@ -351,6 +364,20 @@ def calculate_srs_weight(word, quiz_type):
     
     # 正確越多，權重越低（但不低於 1）
     weight -= correct * 2
+    
+    # 【新增】提示次數權重
+    # 使用過提示的次數越多，表示越不熟練，權重越高
+    weight += hint_sessions * 3  # 每次使用過提示的答題 +3 權重
+    
+    # 累計提示次數也有影響（但權重較低）
+    weight += hint_count * 0.5   # 每使用一次提示 +0.5 權重
+    
+    # 【新增】提示依賴度懲罰
+    # 如果經常使用提示，即使答對也要多複習
+    if hint_sessions > 0:
+        hint_dependency_ratio = hint_count / max(hint_sessions, 1)  # 平均每次答題用幾個提示
+        if hint_dependency_ratio > 2:  # 平均每次用超過2個提示
+            weight += 5  # 額外懲罰
     
     # 從未答過的題目給予較高權重
     if correct == 0 and wrong == 0:
@@ -373,7 +400,7 @@ def calculate_srs_weight(word, quiz_type):
     
     return max(1, weight)
 
-def calculate_next_review(correct_count, wrong_count, is_correct):
+def calculate_next_review(correct_count, wrong_count, is_correct, hint_count=0):
     """計算下次複習時間"""
     # 基礎間隔（分鐘）
     if is_correct:
@@ -381,6 +408,11 @@ def calculate_next_review(correct_count, wrong_count, is_correct):
         intervals = [10, 30, 60, 240, 480, 1440, 2880, 5760, 10080]  # 10分, 30分, 1時, 4時, 8時, 1天, 2天, 4天, 7天
         index = min(correct_count, len(intervals) - 1)
         minutes = intervals[index]
+        
+        # 【新增】如果答對但用了提示，縮短間隔
+        if hint_count > 0:
+            # 用提示答對，間隔減半（但至少10分鐘）
+            minutes = max(10, minutes // 2)
     else:
         # 錯誤：很快再次出現
         minutes = 5
@@ -394,6 +426,7 @@ def record_answer():
     word_id = data.get('word_id')
     quiz_type = data.get('quiz_type')  # 'quiz' 或 'typing'
     is_correct = data.get('is_correct', False)
+    hint_count = data.get('hint_count', 0)  # 本次使用的提示次數
     
     if not word_id or not quiz_type:
         return jsonify({'error': '缺少必要參數'}), 400
@@ -409,21 +442,41 @@ def record_answer():
     if quiz_type == 'quiz':
         correct = (word['quiz_correct'] or 0) + (1 if is_correct else 0)
         wrong = (word['quiz_wrong'] or 0) + (0 if is_correct else 1)
-        next_review = calculate_next_review(correct, wrong, is_correct).isoformat()
+        
+        # 更新提示統計
+        current_hint_count = (word.get('quiz_hint_count') or 0) + hint_count
+        current_hint_sessions = (word.get('quiz_hint_sessions') or 0) + (1 if hint_count > 0 else 0)
+        
+        next_review = calculate_next_review(correct, wrong, is_correct, hint_count).isoformat()
         
         conn.execute('''
-            UPDATE words SET quiz_correct = ?, quiz_wrong = ?, quiz_next_review = ?
+            UPDATE words SET 
+                quiz_correct = ?, 
+                quiz_wrong = ?, 
+                quiz_next_review = ?,
+                quiz_hint_count = ?,
+                quiz_hint_sessions = ?
             WHERE id = ?
-        ''', (correct, wrong, next_review, word_id))
+        ''', (correct, wrong, next_review, current_hint_count, current_hint_sessions, word_id))
     else:  # typing
         correct = (word['typing_correct'] or 0) + (1 if is_correct else 0)
         wrong = (word['typing_wrong'] or 0) + (0 if is_correct else 1)
-        next_review = calculate_next_review(correct, wrong, is_correct).isoformat()
+        
+        # 更新提示統計
+        current_hint_count = (word.get('typing_hint_count') or 0) + hint_count
+        current_hint_sessions = (word.get('typing_hint_sessions') or 0) + (1 if hint_count > 0 else 0)
+        
+        next_review = calculate_next_review(correct, wrong, is_correct, hint_count).isoformat()
         
         conn.execute('''
-            UPDATE words SET typing_correct = ?, typing_wrong = ?, typing_next_review = ?
+            UPDATE words SET 
+                typing_correct = ?, 
+                typing_wrong = ?, 
+                typing_next_review = ?,
+                typing_hint_count = ?,
+                typing_hint_sessions = ?
             WHERE id = ?
-        ''', (correct, wrong, next_review, word_id))
+        ''', (correct, wrong, next_review, current_hint_count, current_hint_sessions, word_id))
     
     conn.commit()
     conn.close()
