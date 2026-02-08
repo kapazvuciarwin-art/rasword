@@ -2045,6 +2045,8 @@
                 
                 // 自動顯示所有提示（僅供學習，不計入提示次數）
                 showAllHints(false);  // false 表示不計入提示次數
+                // 同時顯示假名提示
+                showKanaHintForReview();
                 
                 resultArea.innerHTML = `
                     <div class="result-message correct">🎉 答對了！</div>
@@ -2145,6 +2147,18 @@
             // 記錄提示使用（假名提示也算一次提示）
             hintCount++;
             
+            showKanaHintContent(kanaHintArea, q);
+        }
+        
+        // 顯示假名內容（供答對後自動顯示使用，不計入提示次數）
+        function showKanaHintForReview() {
+            const kanaHintArea = document.getElementById('kana-hint-area');
+            const q = currentQuiz.question;
+            showKanaHintContent(kanaHintArea, q);
+        }
+        
+        // 顯示假名提示內容的共用函數
+        function showKanaHintContent(kanaHintArea, q) {
             const commonFormText = {
                 'kanji': '📝 漢字寫法較常用',
                 'kana': '🔤 假名寫法較常用',
