@@ -983,6 +983,7 @@
 <body>
     <div id="toast" class="toast" style="display: none;" role="status" aria-live="polite"></div>
     <div class="container">
+        <div id="myras-quick-nav" style="margin-bottom:14px; padding:10px; border-radius:10px; background:rgba(255,255,255,0.08); border:1px solid rgba(255,255,255,0.16); font-size:0.9rem;"></div>
         <h1>📚 日文單字練習</h1>
         
         <div class="tabs">
@@ -2899,6 +2900,30 @@
                 return { results: [] };
             }
         }
+
+        (function renderMyrasQuickNav() {
+            const mount = document.getElementById('myras-quick-nav');
+            if (!mount) return;
+            const base = `${window.location.protocol}//${window.location.hostname}:5010`;
+            fetch(`${base}/api/projects`)
+                .then(r => r.ok ? r.json() : Promise.reject(new Error(`HTTP ${r.status}`)))
+                .then(items => {
+                    const list = Array.isArray(items) ? items : [];
+                    if (!list.length) {
+                        mount.innerHTML = `<a href="${base}" style="color:#93c5fd;">回 myras</a>`;
+                        return;
+                    }
+                    const buttons = list.map(p => {
+                        const name = String(p.name || '未命名');
+                        const url = String(p.url || '#');
+                        return `<a href="${url}" style="display:inline-block; margin:4px 6px 0 0; padding:6px 10px; border-radius:8px; text-decoration:none; color:#fff; background:rgba(59,130,246,0.55); border:1px solid rgba(147,197,253,0.4);">${name}</a>`;
+                    }).join('');
+                    mount.innerHTML = buttons;
+                })
+                .catch(() => {
+                    mount.innerHTML = `<a href="${base}" style="color:#93c5fd;">回 myras</a>`;
+                });
+        })();
     </script>
 </body>
 </html>
