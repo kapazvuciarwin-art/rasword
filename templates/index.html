@@ -2045,7 +2045,7 @@
                 <div class="hint-area" id="hint-area"></div>
                 <div id="kana-hint-area"></div>
                 <div class="quiz-controls">
-                    <button class="btn btn-warning" onclick="showHint()">💡 提示（${3 - hintCount} 個）</button>
+                <button class="btn btn-warning" onclick="showHint()">💡 提示（${4 - hintCount} 個）</button>
                     <button class="btn btn-info" onclick="showKanaHint()">あ 顯示假名</button>
                 </div>
                 <div class="options-grid" id="options-grid">
@@ -2055,7 +2055,7 @@
             `;
         }
         
-        // 顯示提示（三段式：短句1 -> 短句2 -> 日文解釋）
+        // 顯示提示（四段式：短句1 -> 短句2 -> 短句3 -> 日文解釋）
         function showHint() {
             if (answered) return;
             
@@ -2081,6 +2081,14 @@
             }
             
             if (hintCount === 3) {
+                if (q.sentence3) {
+                    hintArea.innerHTML += `<div class="hint-text">💡 短句3：${q.sentence3}</div>`;
+                } else {
+                    hintCount++;
+                }
+            }
+            
+            if (hintCount === 4) {
                 if (q.jlpt_level) {
                     hintArea.innerHTML += `<div class="hint-text hint-dictionary">📖 日文解釋：${q.jlpt_level}</div>`;
                 } else {
@@ -2088,9 +2096,9 @@
                 }
             }
             
-            if (hintCount > 3) {
+            if (hintCount > 4) {
                 alert('沒有更多提示了！');
-                hintCount = 3;
+                hintCount = 4;
             }
         }
         
@@ -2175,6 +2183,7 @@
             let actualHintCount = 0;
             if (q.sentence1) actualHintCount++;
             if (q.sentence2) actualHintCount++;
+            if (q.sentence3) actualHintCount++;
             if (q.jlpt_level) actualHintCount++;
             
             // 只有在需要計入提示次數時才更新 hintCount
@@ -2189,6 +2198,9 @@
             }
             if (q.sentence2) {
                 hintsHtml += `<div class="hint-text">💡 短句2：${q.sentence2}</div>`;
+            }
+            if (q.sentence3) {
+                hintsHtml += `<div class="hint-text">💡 短句3：${q.sentence3}</div>`;
             }
             if (q.jlpt_level) {
                 hintsHtml += `<div class="hint-text hint-dictionary">📖 日文解釋：${q.jlpt_level}</div>`;
@@ -2345,6 +2357,7 @@
                                         <div class="detail-item full-width"><strong>完整中文：</strong>${word.chinese_meaning || '-'}</div>
                                         <div class="detail-item full-width"><strong>常用短句1：</strong>${word.sentence1 || '-'}</div>
                                         <div class="detail-item full-width"><strong>常用短句2：</strong>${word.sentence2 || '-'}</div>
+                                        <div class="detail-item full-width"><strong>常用短句3：</strong>${word.sentence3 || '-'}</div>
                                         <div class="detail-item full-width"><strong>日文解釋：</strong>${word.jlpt_level || '-'}</div>
                                         <div class="detail-item"><strong>來源：</strong><span class="source-badge source-${source}">${sourceLabel}</span></div>
                                     </div>

@@ -143,6 +143,7 @@ def init_db():
             part_of_speech TEXT,
             sentence1 TEXT,
             sentence2 TEXT,
+            sentence3 TEXT,
             chinese_meaning TEXT NOT NULL,
             chinese_short TEXT,
             jlpt_level TEXT,
@@ -193,6 +194,8 @@ def init_db():
         conn.execute('ALTER TABLE words ADD COLUMN typing_hint_count INTEGER DEFAULT 0')
     if 'typing_hint_sessions' not in columns:
         conn.execute('ALTER TABLE words ADD COLUMN typing_hint_sessions INTEGER DEFAULT 0')
+    if 'sentence3' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN sentence3 TEXT')
     
     conn.commit()
     conn.close()
@@ -222,10 +225,10 @@ def add_word():
         conn = get_db()
         source = data.get('source', 'manual')  # manual, batch, transcript
         conn.execute('''
-            INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, sentence3, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form, source)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (japanese_word, data.get('part_of_speech', ''), data.get('sentence1', ''), 
-              data.get('sentence2', ''), data.get('chinese_meaning', ''), data.get('chinese_short', ''), 
+              data.get('sentence2', ''), data.get('sentence3', ''), data.get('chinese_meaning', ''), data.get('chinese_short', ''), 
               data.get('jlpt_level', ''), data.get('kana_form', ''), data.get('kanji_form', ''),
               data.get('common_form', 'kanji'), source))
         conn.commit()
@@ -553,6 +556,7 @@ def get_quiz():
             'part_of_speech': question_word['part_of_speech'],
             'sentence1': question_word['sentence1'],
             'sentence2': question_word['sentence2'],
+            'sentence3': question_word['sentence3'],
             'jlpt_level': question_word['jlpt_level'],
             'correct_meaning': question_word['chinese_meaning'],
             'kana_form': question_word['kana_form'],
