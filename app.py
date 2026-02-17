@@ -529,6 +529,47 @@ def record_answer():
     
     return jsonify({'success': True, 'next_review': next_review})
 
+
+@app.route('/api/quiz/kana-hint', methods=['POST'])
+def record_quiz_kana_hint():
+    """在選擇題按下「顯示假名」時，提升該單字在打字題的出題權重"""
+    data = request.json or {}
+    word_id = data.get('word_id')
+    if not word_id:
+        return jsonify({'error': '缺少 word_id'}), 400
+
+    conn = get_db()
+    word = conn.execute(
+        'SELECT id, typing_hint_count, typing_hint_sessions FROM words WHERE id = ?',
+        (word_id,),
+    ).fetchone()
+    if not word:
+        conn.close()
+        return jsonify({'error': '找不到單字'}), 404
+
+    try:
+        hint_count = (word['typing_hint_count'] or 0) + 1
+    except (KeyError, IndexError):
+        hint_count = 1
+    try:
+        hint_sessions = (word['typing_hint_sessions'] or 0) + 1
+    except (KeyError, IndexError):
+        hint_sessions = 1
+
+    # 拉近打字複習時間，避免被未到期機制壓低權重
+    next_review = datetime.now().isoformat()
+    conn.execute(
+        '''
+        UPDATE words
+        SET typing_hint_count = ?, typing_hint_sessions = ?, typing_next_review = ?
+        WHERE id = ?
+        ''',
+        (hint_count, hint_sessions, next_review, word_id),
+    )
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
 @app.route('/api/quiz', methods=['GET'])
 def get_quiz():
     source_filter = _normalize_source_filter(request.args.get('source'))

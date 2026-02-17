@@ -1267,6 +1267,7 @@
         let currentQuiz = null;
         let hintCount = 0;
         let answered = false;
+        let kanaHintBoosted = false;
         
         // 頁面載入時讀取儲存的 API Keys
         document.addEventListener('DOMContentLoaded', function() {
@@ -2038,6 +2039,7 @@
                 currentQuiz = await response.json();
                 hintCount = 0;
                 answered = false;
+                kanaHintBoosted = false;
                 
                 renderQuiz();
             } catch (error) {
@@ -2253,6 +2255,19 @@
             const url = getRaspomushiLyricUrl(lyricId);
             return `<a class="btn btn-info btn-small" href="${url}" target="_blank" rel="noopener noreferrer">🎵 ${sourceTitle}</a>`;
         }
+
+        async function markKanaHintForTypingWeight(wordId) {
+            if (!wordId) return;
+            try {
+                await fetch('/api/quiz/kana-hint', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ word_id: wordId })
+                });
+            } catch (error) {
+                console.error('記錄假名提示權重失敗:', error);
+            }
+        }
         
         // 顯示假名提示
         function showKanaHint() {
@@ -2269,6 +2284,10 @@
             
             // 記錄提示使用（假名提示也算一次提示）
             hintCount++;
+            if (!kanaHintBoosted && q && q.id) {
+                kanaHintBoosted = true;
+                markKanaHintForTypingWeight(q.id);
+            }
             
             showKanaHintContent(kanaHintArea, q);
         }
@@ -2314,6 +2333,7 @@
         function retryQuiz() {
             hintCount = 0;
             answered = false;
+            kanaHintBoosted = false;
             renderQuiz();
         }
         
