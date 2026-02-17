@@ -1090,6 +1090,17 @@
         <!-- 練習題目頁面 -->
         <div id="quiz-tab" class="tab-content">
             <div class="quiz-section">
+                <div class="form-group" style="max-width: 320px; margin-bottom: 16px;">
+                    <label>題目來源</label>
+                    <select id="quiz-source-filter" onchange="loadQuiz()">
+                        <option value="all">全部來源</option>
+                        <option value="manual">手動輸入</option>
+                        <option value="lyrics">歌詞來源</option>
+                        <option value="transcript">逐字稿來源</option>
+                        <option value="batch">批次輸入</option>
+                        <option value="batch_ai">批次 AI 生成</option>
+                    </select>
+                </div>
                 <div id="quiz-container">
                     <!-- 題目會動態載入這裡 -->
                 </div>
@@ -1109,6 +1120,17 @@
         <!-- 打字測驗頁面 -->
         <div id="typing-tab" class="tab-content">
             <div class="quiz-section">
+                <div class="form-group" style="max-width: 320px; margin-bottom: 16px;">
+                    <label>題目來源</label>
+                    <select id="typing-source-filter" onchange="loadTypingQuiz()">
+                        <option value="all">全部來源</option>
+                        <option value="manual">手動輸入</option>
+                        <option value="lyrics">歌詞來源</option>
+                        <option value="transcript">逐字稿來源</option>
+                        <option value="batch">批次輸入</option>
+                        <option value="batch_ai">批次 AI 生成</option>
+                    </select>
+                </div>
                 <div id="typing-container">
                     <!-- 打字測驗會動態載入這裡 -->
                 </div>
@@ -1997,9 +2019,10 @@
         // 載入練習題目
         async function loadQuiz() {
             const container = document.getElementById('quiz-container');
+            const selectedSource = document.getElementById('quiz-source-filter')?.value || 'all';
             
             try {
-                const response = await fetch('/api/quiz');
+                const response = await fetch(`/api/quiz?source=${encodeURIComponent(selectedSource)}`);
                 
                 if (!response.ok) {
                     const error = await response.json();
@@ -2136,6 +2159,7 @@
                     <div class="result-message correct">🎉 答對了！</div>
                     <div class="detail-btn-area">
                         <button class="btn btn-secondary" onclick="showChineseDetail()">📖 中文詳解</button>
+                        ${renderLyricLinkButton(q.source_title, q.source_lyric_id)}
                     </div>
                     <div id="chinese-detail-area" class="chinese-detail" style="display: none;">
                         <p><strong>中文解釋：</strong>${q.correct_meaning || '無'}</p>
@@ -2217,6 +2241,17 @@
             } else {
                 detailArea.style.display = 'none';
             }
+        }
+
+        function getRaspomushiLyricUrl(lyricId) {
+            if (!lyricId) return '';
+            return `${window.location.protocol}//${window.location.hostname}:5003/#lyric/${lyricId}`;
+        }
+
+        function renderLyricLinkButton(sourceTitle, lyricId) {
+            if (!sourceTitle || !lyricId) return '';
+            const url = getRaspomushiLyricUrl(lyricId);
+            return `<a class="btn btn-info btn-small" href="${url}" target="_blank" rel="noopener noreferrer">🎵 ${sourceTitle}</a>`;
         }
         
         // 顯示假名提示
@@ -2359,6 +2394,7 @@
                                         <div class="detail-item full-width"><strong>常用短句2：</strong>${word.sentence2 || '-'}</div>
                                         <div class="detail-item full-width"><strong>常用短句3：</strong>${word.sentence3 || '-'}</div>
                                         <div class="detail-item full-width"><strong>日文解釋：</strong>${word.jlpt_level || '-'}</div>
+                                        <div class="detail-item full-width"><strong>歌名：</strong>${renderLyricLinkButton(word.source_title, word.source_lyric_id) || '-'}</div>
                                         <div class="detail-item"><strong>來源：</strong><span class="source-badge source-${source}">${sourceLabel}</span></div>
                                     </div>
                                 </div>
@@ -2410,9 +2446,10 @@
         // 載入打字測驗
         async function loadTypingQuiz() {
             const container = document.getElementById('typing-container');
+            const selectedSource = document.getElementById('typing-source-filter')?.value || 'all';
             
             try {
-                const response = await fetch('/api/typing-quiz');
+                const response = await fetch(`/api/typing-quiz?source=${encodeURIComponent(selectedSource)}`);
                 
                 if (!response.ok) {
                     const error = await response.json();
@@ -2540,6 +2577,9 @@
             if (isCorrect) {
                 resultArea.innerHTML = `
                     <div class="result-message correct">🎉 答對了！</div>
+                    <div class="detail-btn-area" style="margin-top: 8px;">
+                        ${renderLyricLinkButton(currentTypingQuiz.question.source_title, currentTypingQuiz.question.source_lyric_id)}
+                    </div>
                     <button class="btn btn-success" onclick="loadTypingQuiz()">下一題 →</button>
                 `;
             } else {

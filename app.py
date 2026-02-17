@@ -35,6 +35,8 @@ DEFAULT_GROQ_MODEL = os.getenv("GROQ_DEFAULT_MODEL", "llama-3.3-70b-versatile")
 
 app = Flask(__name__)
 
+ALLOWED_QUIZ_SOURCES = {"manual", "lyrics", "transcript", "batch", "batch_ai"}
+
 # API 速率限制器
 class RateLimiter:
     def __init__(self, max_calls=5, period=59):
@@ -134,6 +136,15 @@ def get_db():
     conn.row_factory = sqlite3.Row
     return conn
 
+
+def _normalize_source_filter(source_value):
+    source = (source_value or "").strip().lower()
+    if not source or source == "all":
+        return None
+    if source in ALLOWED_QUIZ_SOURCES:
+        return source
+    return "__invalid__"
+
 def init_db():
     conn = get_db()
     conn.execute('''
@@ -150,6 +161,8 @@ def init_db():
             kana_form TEXT,
             kanji_form TEXT,
             common_form TEXT DEFAULT 'kanji',
+            source_title TEXT,
+            source_lyric_id INTEGER,
             quiz_correct INTEGER DEFAULT 0,
             quiz_wrong INTEGER DEFAULT 0,
             quiz_next_review TEXT,
@@ -196,6 +209,10 @@ def init_db():
         conn.execute('ALTER TABLE words ADD COLUMN typing_hint_sessions INTEGER DEFAULT 0')
     if 'sentence3' not in columns:
         conn.execute('ALTER TABLE words ADD COLUMN sentence3 TEXT')
+    if 'source_title' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN source_title TEXT')
+    if 'source_lyric_id' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN source_lyric_id INTEGER')
     
     conn.commit()
     conn.close()
@@ -225,12 +242,12 @@ def add_word():
         conn = get_db()
         source = data.get('source', 'manual')  # manual, batch, transcript
         conn.execute('''
-            INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, sentence3, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form, source)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO words (japanese_word, part_of_speech, sentence1, sentence2, sentence3, chinese_meaning, chinese_short, jlpt_level, kana_form, kanji_form, common_form, source, source_title, source_lyric_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (japanese_word, data.get('part_of_speech', ''), data.get('sentence1', ''), 
               data.get('sentence2', ''), data.get('sentence3', ''), data.get('chinese_meaning', ''), data.get('chinese_short', ''), 
               data.get('jlpt_level', ''), data.get('kana_form', ''), data.get('kanji_form', ''),
-              data.get('common_form', 'kanji'), source))
+              data.get('common_form', 'kanji'), source, data.get('source_title', ''), data.get('source_lyric_id')))
         conn.commit()
         conn.close()
         return jsonify({'success': True})
@@ -514,12 +531,20 @@ def record_answer():
 
 @app.route('/api/quiz', methods=['GET'])
 def get_quiz():
+    source_filter = _normalize_source_filter(request.args.get('source'))
+    if source_filter == "__invalid__":
+        return jsonify({'error': '無效的來源篩選'}), 400
+
     conn = get_db()
-    words = conn.execute('SELECT * FROM words').fetchall()
+    if source_filter:
+        words = conn.execute('SELECT * FROM words WHERE source = ?', (source_filter,)).fetchall()
+    else:
+        words = conn.execute('SELECT * FROM words').fetchall()
     conn.close()
     
-    if len(words) < 10:
-        return jsonify({'error': '資料庫中至少需要10個單字才能開始練習'}), 400
+    if len(words) < 2:
+        source_text = f'（來源：{source_filter}）' if source_filter else ''
+        return jsonify({'error': f'可用單字不足，至少需要 2 個單字才能開始選擇題{source_text}'}), 400
     
     # 計算每個單字的 SRS 權重
     weighted_words = [(w, calculate_srs_weight(w, 'quiz')) for w in words]
@@ -561,7 +586,10 @@ def get_quiz():
             'correct_meaning': question_word['chinese_meaning'],
             'kana_form': question_word['kana_form'],
             'kanji_form': question_word['kanji_form'],
-            'common_form': question_word['common_form']
+            'common_form': question_word['common_form'],
+            'source': question_word['source'],
+            'source_title': question_word['source_title'],
+            'source_lyric_id': question_word['source_lyric_id'],
         },
         'options': options
     })
@@ -1108,17 +1136,30 @@ def generate_batch():
 @app.route('/api/typing-quiz', methods=['GET'])
 def get_typing_quiz():
     """打字測驗 - 顯示漢字，回答假名"""
+    source_filter = _normalize_source_filter(request.args.get('source'))
+    if source_filter == "__invalid__":
+        return jsonify({'error': '無效的來源篩選'}), 400
+
     conn = get_db()
     # 只選擇有漢字寫法和假名寫法的單字
-    words = conn.execute('''
-        SELECT * FROM words 
-        WHERE kanji_form IS NOT NULL AND kanji_form != '' 
-        AND kana_form IS NOT NULL AND kana_form != ''
-    ''').fetchall()
+    if source_filter:
+        words = conn.execute('''
+            SELECT * FROM words 
+            WHERE kanji_form IS NOT NULL AND kanji_form != ''
+            AND kana_form IS NOT NULL AND kana_form != ''
+            AND source = ?
+        ''', (source_filter,)).fetchall()
+    else:
+        words = conn.execute('''
+            SELECT * FROM words 
+            WHERE kanji_form IS NOT NULL AND kanji_form != '' 
+            AND kana_form IS NOT NULL AND kana_form != ''
+        ''').fetchall()
     conn.close()
     
     if len(words) < 1:
-        return jsonify({'error': '資料庫中沒有足夠的單字（需要有漢字和假名寫法的單字）'}), 400
+        source_text = f'（來源：{source_filter}）' if source_filter else ''
+        return jsonify({'error': f'沒有符合條件的單字（需要有漢字和假名寫法）{source_text}'}), 400
     
     # 計算每個單字的 SRS 權重
     weighted_words = [(w, calculate_srs_weight(w, 'typing')) for w in words]
@@ -1142,9 +1183,13 @@ def get_typing_quiz():
             'part_of_speech': question_word['part_of_speech'],
             'sentence1': question_word['sentence1'],
             'sentence2': question_word['sentence2'],
+            'sentence3': question_word['sentence3'],
             'jlpt_level': question_word['jlpt_level'],
             'chinese_short': question_word['chinese_short'],
-            'chinese_meaning': question_word['chinese_meaning']
+            'chinese_meaning': question_word['chinese_meaning'],
+            'source': question_word['source'],
+            'source_title': question_word['source_title'],
+            'source_lyric_id': question_word['source_lyric_id'],
         }
     })
 
