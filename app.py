@@ -10,6 +10,9 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from dotenv import load_dotenv
 
+from fugashi import Tagger
+from pykakasi import kakasi as Kakasi
+
 load_dotenv()
 
 # OpenRouter API 設定
@@ -360,6 +363,85 @@ def delete_word(word_id):
     conn.commit()
     conn.close()
     return jsonify({'success': True})
+
+
+# --- Kana utility (獨立假名 API) ---
+
+_tagger = Tagger()
+_kakasi = Kakasi()
+_kakasi.setMode("J", "H")  # 漢字 -> 平假名
+_kakasi.setMode("K", "H")  # 片假名 -> 平假名
+_converter = _kakasi.getConverter()
+
+
+def _analyze_kana(text):
+  text = (text or "").strip()
+  if not text:
+      return {"tokens": [], "reading": ""}
+
+  tokens = []
+  readings = []
+  offset = 0
+
+  for token in _tagger(text):
+      surface = token.surface
+      length = len(surface)
+      start = offset
+      end = offset + length
+      offset = end
+
+      feat = token.feature
+      # fugashi + unidic-lite 通常有 reading/kana，沒有時用 pykakasi 補
+      reading = getattr(token, "reading", None) or getattr(token, "kana", None)
+      if not reading:
+          reading = _converter.do(surface)
+
+      readings.append(reading)
+
+      pos = ""
+      try:
+          # 部分字典會把詞性放在 feature[0]
+          pos = feat.pos1 if hasattr(feat, "pos1") else ""
+      except Exception:
+          pos = ""
+
+      tokens.append(
+          {
+              "surface": surface,
+              "kana": reading,
+              "pos": pos,
+              "start": start,
+              "end": end,
+          }
+      )
+
+  return {"tokens": tokens, "reading": "".join(readings)}
+
+
+@app.route("/api/kana", methods=["POST"])
+def api_kana():
+    """純假名 API，不存資料庫，只回傳解析結果"""
+    try:
+        data = request.json or {}
+        text = (data.get("text") or "").strip()
+        if not text:
+            return jsonify({"success": False, "error": "text 不可為空"}), 400
+
+        # 簡單長度限制，避免被濫用
+        if len(text) > 256:
+            text = text[:256]
+
+        result = _analyze_kana(text)
+        return jsonify(
+            {
+                "success": True,
+                "text": text,
+                "tokens": result["tokens"],
+                "reading": result["reading"],
+            }
+        )
+    except Exception as e:
+        return jsonify({"success": False, "error": str(e)}), 500
 
 def calculate_srs_weight(word, quiz_type):
     """計算 SRS 權重，權重越高越容易被選中"""
