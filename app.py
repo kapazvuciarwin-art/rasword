@@ -137,6 +137,9 @@ LEARNING_SETTING_MASTERY_N = "mastery_correct_n"
 LEARNING_SETTING_ACTIVE_X = "mastery_active_days"
 LEARNING_DEFAULT_MASTERY_N = 3
 LEARNING_DEFAULT_ACTIVE_X = 30
+REVIEW_BUCKET_PATTERN = ("due", "learning", "due", "learning", "new", "due", "learning", "mastered")
+_REVIEW_CYCLE_CURSOR = {"quiz": 0, "typing": 0}
+_REVIEW_CYCLE_LOCK = threading.Lock()
 
 def get_db():
     conn = sqlite3.connect(DATABASE)
@@ -189,6 +192,83 @@ def _get_learning_settings(conn):
 def _parse_iso_datetime(text):
     if not text:
         return None
+
+
+def _word_stage(word, quiz_type, mastery_n, now=None):
+    now = now or datetime.now()
+    if quiz_type == "quiz":
+        correct = word["quiz_correct"] or 0
+        wrong = word["quiz_wrong"] or 0
+        next_review_text = word["quiz_next_review"]
+    else:
+        correct = word["typing_correct"] or 0
+        wrong = word["typing_wrong"] or 0
+        next_review_text = word["typing_next_review"]
+
+    attempts = correct + wrong
+    next_review_dt = _parse_iso_datetime(next_review_text)
+
+    if attempts <= 0:
+        return "new"
+    if next_review_dt is not None and now >= next_review_dt:
+        return "due"
+    if wrong > correct:
+        return "due"
+    if correct >= mastery_n:
+        return "mastered"
+    return "learning"
+
+
+def _weighted_pick_word(candidates, quiz_type):
+    if len(candidates) == 1:
+        return candidates[0]
+    weighted_words = [(w, calculate_srs_weight(w, quiz_type)) for w in candidates]
+    total_weight = sum(weight for _, weight in weighted_words)
+    r = random.uniform(0, total_weight)
+    cumulative = 0.0
+    for word, weight in weighted_words:
+        cumulative += weight
+        if r <= cumulative:
+            return word
+    return candidates[0]
+
+
+def _next_bucket_preference(quiz_type):
+    with _REVIEW_CYCLE_LOCK:
+        idx = _REVIEW_CYCLE_CURSOR.get(quiz_type, 0)
+        preferred = REVIEW_BUCKET_PATTERN[idx % len(REVIEW_BUCKET_PATTERN)]
+        _REVIEW_CYCLE_CURSOR[quiz_type] = (idx + 1) % len(REVIEW_BUCKET_PATTERN)
+    return preferred
+
+
+def _select_question_word(words, quiz_type, mastery_n):
+    now = datetime.now()
+    buckets = {
+        "due": [],
+        "learning": [],
+        "new": [],
+        "mastered": [],
+    }
+    for word in words:
+        stage = _word_stage(word, quiz_type, mastery_n, now=now)
+        buckets[stage].append(word)
+
+    preferred = _next_bucket_preference(quiz_type)
+    if buckets[preferred]:
+        chosen_bucket = preferred
+    else:
+        # 避免半生不熟：優先清到期，其次學習中，再少量新題，最後已學會回顧
+        for b in ("due", "learning", "new", "mastered"):
+            if buckets[b]:
+                chosen_bucket = b
+                break
+        else:
+            chosen_bucket = "new"
+
+    candidates = buckets[chosen_bucket]
+    if chosen_bucket in ("due", "learning"):
+        return _weighted_pick_word(candidates, quiz_type), chosen_bucket
+    return random.choice(candidates), chosen_bucket
     try:
         return datetime.fromisoformat(text)
     except Exception:
@@ -879,25 +959,14 @@ def get_quiz():
         words = conn.execute('SELECT * FROM words WHERE source = ?', (source_filter,)).fetchall()
     else:
         words = conn.execute('SELECT * FROM words').fetchall()
+    mastery_n, _ = _get_learning_settings(conn)
     conn.close()
     
     if len(words) < 2:
         source_text = f'（來源：{source_filter}）' if source_filter else ''
         return jsonify({'error': f'可用單字不足，至少需要 2 個單字才能開始選擇題{source_text}'}), 400
     
-    # 計算每個單字的 SRS 權重
-    weighted_words = [(w, calculate_srs_weight(w, 'quiz')) for w in words]
-    total_weight = sum(weight for _, weight in weighted_words)
-    
-    # 根據權重隨機選擇
-    r = random.uniform(0, total_weight)
-    cumulative = 0
-    question_word = words[0]
-    for word, weight in weighted_words:
-        cumulative += weight
-        if r <= cumulative:
-            question_word = word
-            break
+    question_word, selected_bucket = _select_question_word(words, 'quiz', mastery_n)
     
     # 選擇9個其他單字作為干擾選項
     other_words = [w for w in words if w['id'] != question_word['id']]
@@ -929,6 +998,7 @@ def get_quiz():
             'source': question_word['source'],
             'source_title': question_word['source_title'],
             'source_lyric_id': question_word['source_lyric_id'],
+            'review_bucket': selected_bucket,
         },
         'options': options
     })
@@ -1575,25 +1645,14 @@ def get_typing_quiz():
             WHERE kanji_form IS NOT NULL AND kanji_form != '' 
             AND kana_form IS NOT NULL AND kana_form != ''
         ''').fetchall()
+    mastery_n, _ = _get_learning_settings(conn)
     conn.close()
     
     if len(words) < 1:
         source_text = f'（來源：{source_filter}）' if source_filter else ''
         return jsonify({'error': f'沒有符合條件的單字（需要有漢字和假名寫法）{source_text}'}), 400
     
-    # 計算每個單字的 SRS 權重
-    weighted_words = [(w, calculate_srs_weight(w, 'typing')) for w in words]
-    total_weight = sum(weight for _, weight in weighted_words)
-    
-    # 根據權重隨機選擇
-    r = random.uniform(0, total_weight)
-    cumulative = 0
-    question_word = words[0]
-    for word, weight in weighted_words:
-        cumulative += weight
-        if r <= cumulative:
-            question_word = word
-            break
+    question_word, selected_bucket = _select_question_word(words, 'typing', mastery_n)
     
     return jsonify({
         'question': {
@@ -1610,6 +1669,7 @@ def get_typing_quiz():
             'source': question_word['source'],
             'source_title': question_word['source_title'],
             'source_lyric_id': question_word['source_lyric_id'],
+            'review_bucket': selected_bucket,
         }
     })
 
