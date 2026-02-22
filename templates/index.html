@@ -1207,7 +1207,7 @@
             <div class="quiz-section">
                 <div class="form-group" style="max-width: 320px; margin-bottom: 16px;">
                     <label>題目來源</label>
-                    <select id="quiz-source-filter" onchange="loadQuiz()">
+                    <select id="quiz-source-filter" onchange="handleQuizSourceChange()">
                         <option value="all">全部來源</option>
                         <option value="manual">手動輸入</option>
                         <option value="lyrics">歌詞來源</option>
@@ -1216,6 +1216,20 @@
                         <option value="batch_ai">批次 AI 生成</option>
                     </select>
                 </div>
+                <div class="form-group" style="max-width: 320px; margin-bottom: 10px;">
+                    <label>本回合題數</label>
+                    <input id="quiz-session-count" type="number" min="1" max="200" value="10">
+                </div>
+                <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:10px;">
+                    <button class="btn btn-secondary btn-small" type="button" onclick="setQuizSessionCount(5)">5題</button>
+                    <button class="btn btn-secondary btn-small" type="button" onclick="setQuizSessionCount(10)">10題</button>
+                    <button class="btn btn-secondary btn-small" type="button" onclick="setQuizSessionCount(20)">20題</button>
+                </div>
+                <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:16px;">
+                    <button class="btn btn-primary" type="button" onclick="startQuizSession()">開始本回合</button>
+                    <button class="btn btn-secondary" type="button" onclick="resetQuizSession()">重設</button>
+                </div>
+                <div id="quiz-session-status" style="margin-bottom: 14px; color: var(--text-secondary); font-size: 14px;"></div>
                 <div id="quiz-container">
                     <!-- 題目會動態載入這裡 -->
                 </div>
@@ -1276,7 +1290,7 @@
             <div class="quiz-section">
                 <div class="form-group" style="max-width: 320px; margin-bottom: 16px;">
                     <label>題目來源</label>
-                    <select id="typing-source-filter" onchange="loadTypingQuiz()">
+                    <select id="typing-source-filter" onchange="handleTypingSourceChange()">
                         <option value="all">全部來源</option>
                         <option value="manual">手動輸入</option>
                         <option value="lyrics">歌詞來源</option>
@@ -1285,6 +1299,20 @@
                         <option value="batch_ai">批次 AI 生成</option>
                     </select>
                 </div>
+                <div class="form-group" style="max-width: 320px; margin-bottom: 10px;">
+                    <label>本回合題數</label>
+                    <input id="typing-session-count" type="number" min="1" max="200" value="10">
+                </div>
+                <div style="display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin-bottom:10px;">
+                    <button class="btn btn-secondary btn-small" type="button" onclick="setTypingSessionCount(5)">5題</button>
+                    <button class="btn btn-secondary btn-small" type="button" onclick="setTypingSessionCount(10)">10題</button>
+                    <button class="btn btn-secondary btn-small" type="button" onclick="setTypingSessionCount(20)">20題</button>
+                </div>
+                <div style="display:flex; gap:10px; justify-content:center; flex-wrap:wrap; margin-bottom:16px;">
+                    <button class="btn btn-primary" type="button" onclick="startTypingSession()">開始本回合</button>
+                    <button class="btn btn-secondary" type="button" onclick="resetTypingSession()">重設</button>
+                </div>
+                <div id="typing-session-status" style="margin-bottom: 14px; color: var(--text-secondary); font-size: 14px;"></div>
                 <div id="typing-container">
                     <!-- 打字測驗會動態載入這裡 -->
                 </div>
@@ -1422,6 +1450,9 @@
         let hintCount = 0;
         let answered = false;
         let kanaHintBoosted = false;
+        let quizSessionActive = false;
+        let quizSessionTotal = 0;
+        let quizSessionDone = 0;
         let learningProgressData = null;
         let learningStatusByWordId = {};
         
@@ -1443,6 +1474,8 @@
             const radio = document.querySelector(`input[name="api_provider"][value="${savedProvider}"]`) || document.querySelector('input[name="api_provider"][value="gemini"]');
             if (radio) radio.checked = true;
             switchApiProvider(savedProvider);
+            renderQuizSessionIntro();
+            renderTypingSessionIntro();
         });
         
         // 切換 API 提供者
@@ -1803,9 +1836,13 @@
             document.getElementById(`${tab}-tab`).classList.add('active');
             
             if (tab === 'quiz') {
-                loadQuiz();
+                if (!quizSessionActive) {
+                    renderQuizSessionIntro();
+                }
             } else if (tab === 'typing') {
-                loadTypingQuiz();
+                if (!typingSessionActive) {
+                    renderTypingSessionIntro();
+                }
             } else if (tab === 'list') {
                 loadListTabData();
             }
@@ -2251,10 +2288,104 @@
             }
         }
         
+        function clampSessionCount(rawValue) {
+            const n = parseInt(rawValue, 10);
+            if (!Number.isFinite(n)) return 10;
+            if (n < 1) return 1;
+            if (n > 200) return 200;
+            return n;
+        }
+
+        function updateQuizSessionStatus() {
+            const statusEl = document.getElementById('quiz-session-status');
+            if (!statusEl) return;
+            if (!quizSessionActive) {
+                statusEl.textContent = '尚未開始本回合。先設定題數再開始出題。';
+                return;
+            }
+            const remaining = Math.max(quizSessionTotal - quizSessionDone, 0);
+            statusEl.textContent = `本回合進度：${quizSessionDone}/${quizSessionTotal}（剩餘 ${remaining} 題）`;
+        }
+
+        function renderQuizSessionIntro(message = '') {
+            updateQuizSessionStatus();
+            const container = document.getElementById('quiz-container');
+            const msg = message ? `<p style="margin-bottom:10px;">${message}</p>` : '';
+            container.innerHTML = `
+                <div class="no-words-message">
+                    ${msg}
+                    <p>請先設定「本回合題數」，再按「開始本回合」。</p>
+                </div>
+            `;
+        }
+
+        function startQuizSession() {
+            quizSessionTotal = clampSessionCount(document.getElementById('quiz-session-count').value);
+            document.getElementById('quiz-session-count').value = quizSessionTotal;
+            quizSessionDone = 0;
+            quizSessionActive = true;
+            updateQuizSessionStatus();
+            loadQuiz();
+        }
+
+        function setQuizSessionCount(n) {
+            document.getElementById('quiz-session-count').value = clampSessionCount(n);
+        }
+
+        function resetQuizSession() {
+            quizSessionActive = false;
+            quizSessionDone = 0;
+            quizSessionTotal = 0;
+            currentQuiz = null;
+            answered = false;
+            renderQuizSessionIntro('已重設本回合。');
+        }
+
+        function finishQuizSession() {
+            quizSessionActive = false;
+            currentQuiz = null;
+            const done = quizSessionDone;
+            const total = quizSessionTotal;
+            quizSessionTotal = 0;
+            updateQuizSessionStatus();
+            const container = document.getElementById('quiz-container');
+            container.innerHTML = `
+                <div class="result-message correct">✅ 本回合完成！</div>
+                <p style="margin: 10px 0 14px 0; color: var(--text-secondary);">你已完成 ${done}/${total} 題。</p>
+                <button class="btn btn-primary" onclick="startQuizSession()">再來一回合</button>
+            `;
+        }
+
+        function nextQuizQuestion() {
+            if (!quizSessionActive) {
+                renderQuizSessionIntro();
+                return;
+            }
+            quizSessionDone += 1;
+            if (quizSessionDone >= quizSessionTotal) {
+                finishQuizSession();
+                return;
+            }
+            updateQuizSessionStatus();
+            loadQuiz();
+        }
+
+        function handleQuizSourceChange() {
+            if (quizSessionActive) {
+                loadQuiz();
+            } else {
+                renderQuizSessionIntro('來源已更新。按「開始本回合」後依新來源出題。');
+            }
+        }
+
         // 載入練習題目
         async function loadQuiz() {
             const container = document.getElementById('quiz-container');
             const selectedSource = document.getElementById('quiz-source-filter')?.value || 'all';
+            if (!quizSessionActive) {
+                renderQuizSessionIntro();
+                return;
+            }
             
             try {
                 const response = await fetch(`/api/quiz?source=${encodeURIComponent(selectedSource)}`);
@@ -2400,7 +2531,7 @@
                     <div id="chinese-detail-area" class="chinese-detail" style="display: none;">
                         <p><strong>中文解釋：</strong>${q.correct_meaning || '無'}</p>
                     </div>
-                    <button class="btn btn-success" onclick="loadQuiz()">下一題 →</button>
+                    <button class="btn btn-success" onclick="nextQuizQuestion()">${(quizSessionDone + 1 >= quizSessionTotal) ? '完成本回合' : '下一題 →'}</button>
                 `;
             } else {
                 btn.classList.add('wrong');
@@ -2411,6 +2542,7 @@
                 resultArea.innerHTML = `
                     <div class="result-message wrong">❌ 答錯了！正確答案是：${currentQuiz.question.correct_meaning}</div>
                     <button class="btn btn-danger" onclick="retryQuiz()">重新作答</button>
+                    <button class="btn btn-secondary" onclick="nextQuizQuestion()">${(quizSessionDone + 1 >= quizSessionTotal) ? '完成本回合' : '下一題 →'}</button>
                 `;
             }
         }
@@ -2700,11 +2832,100 @@
         let currentTypingQuiz = null;
         let typingHintCount = 0;
         let typingAnswered = false;
+        let typingSessionActive = false;
+        let typingSessionTotal = 0;
+        let typingSessionDone = 0;
+
+        function updateTypingSessionStatus() {
+            const statusEl = document.getElementById('typing-session-status');
+            if (!statusEl) return;
+            if (!typingSessionActive) {
+                statusEl.textContent = '尚未開始本回合。先設定題數再開始出題。';
+                return;
+            }
+            const remaining = Math.max(typingSessionTotal - typingSessionDone, 0);
+            statusEl.textContent = `本回合進度：${typingSessionDone}/${typingSessionTotal}（剩餘 ${remaining} 題）`;
+        }
+
+        function renderTypingSessionIntro(message = '') {
+            updateTypingSessionStatus();
+            const container = document.getElementById('typing-container');
+            const msg = message ? `<p style="margin-bottom:10px;">${message}</p>` : '';
+            container.innerHTML = `
+                <div class="no-words-message">
+                    ${msg}
+                    <p>請先設定「本回合題數」，再按「開始本回合」。</p>
+                </div>
+            `;
+        }
+
+        function startTypingSession() {
+            typingSessionTotal = clampSessionCount(document.getElementById('typing-session-count').value);
+            document.getElementById('typing-session-count').value = typingSessionTotal;
+            typingSessionDone = 0;
+            typingSessionActive = true;
+            updateTypingSessionStatus();
+            loadTypingQuiz();
+        }
+
+        function setTypingSessionCount(n) {
+            document.getElementById('typing-session-count').value = clampSessionCount(n);
+        }
+
+        function resetTypingSession() {
+            typingSessionActive = false;
+            typingSessionDone = 0;
+            typingSessionTotal = 0;
+            currentTypingQuiz = null;
+            typingAnswered = false;
+            renderTypingSessionIntro('已重設本回合。');
+        }
+
+        function finishTypingSession() {
+            typingSessionActive = false;
+            currentTypingQuiz = null;
+            const done = typingSessionDone;
+            const total = typingSessionTotal;
+            typingSessionTotal = 0;
+            updateTypingSessionStatus();
+            const container = document.getElementById('typing-container');
+            container.innerHTML = `
+                <div class="result-message correct">✅ 本回合完成！</div>
+                <p style="margin: 10px 0 14px 0; color: var(--text-secondary);">你已完成 ${done}/${total} 題。</p>
+                <button class="btn btn-primary" onclick="startTypingSession()">再來一回合</button>
+            `;
+        }
+
+        function nextTypingQuestion() {
+            if (!typingSessionActive) {
+                renderTypingSessionIntro();
+                return;
+            }
+            typingSessionDone += 1;
+            if (typingSessionDone >= typingSessionTotal) {
+                finishTypingSession();
+                return;
+            }
+            updateTypingSessionStatus();
+            loadTypingQuiz();
+        }
+
+        function handleTypingSourceChange() {
+            if (typingSessionActive) {
+                loadTypingQuiz();
+            } else {
+                renderTypingSessionIntro('來源已更新。按「開始本回合」後依新來源出題。');
+            }
+        }
         
         // 載入打字測驗
         async function loadTypingQuiz() {
             const container = document.getElementById('typing-container');
             const selectedSource = document.getElementById('typing-source-filter')?.value || 'all';
+            if (!typingSessionActive) {
+                renderTypingSessionIntro();
+                return;
+            }
             
             try {
                 const response = await fetch(`/api/typing-quiz?source=${encodeURIComponent(selectedSource)}`);
@@ -2838,7 +3059,7 @@
                     <div class="detail-btn-area" style="margin-top: 8px;">
                         ${renderLyricLinkButton(currentTypingQuiz.question.source_title, currentTypingQuiz.question.source_lyric_id)}
                     </div>
-                    <button class="btn btn-success" onclick="loadTypingQuiz()">下一題 →</button>
+                    <button class="btn btn-success" onclick="nextTypingQuestion()">${(typingSessionDone + 1 >= typingSessionTotal) ? '完成本回合' : '下一題 →'}</button>
                 `;
             } else {
                 resultArea.innerHTML = `
@@ -2848,7 +3069,7 @@
                         正確答案：${correctAnswer}
                     </div>
                     <button class="btn btn-danger" onclick="retryTypingQuiz()">重新作答</button>
-                    <button class="btn btn-secondary" onclick="loadTypingQuiz()">下一題 →</button>
+                    <button class="btn btn-secondary" onclick="nextTypingQuestion()">${(typingSessionDone + 1 >= typingSessionTotal) ? '完成本回合' : '下一題 →'}</button>
                 `;
             }
         }
