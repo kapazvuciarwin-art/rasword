@@ -610,6 +610,121 @@
             margin-bottom: 15px;
             color: var(--text-primary);
         }
+
+        .learning-progress-panel {
+            margin-bottom: 18px;
+            padding: 16px;
+            border-radius: 10px;
+            background: var(--bg-tertiary);
+            border: 1px solid var(--border-color);
+        }
+
+        .learning-progress-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-bottom: 12px;
+        }
+
+        .learning-progress-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            padding: 10px;
+        }
+
+        .learning-progress-item .label {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-bottom: 6px;
+        }
+
+        .learning-progress-item .value {
+            font-size: 22px;
+            font-weight: 700;
+            color: var(--text-primary);
+        }
+
+        .learning-progress-item .sub {
+            font-size: 12px;
+            color: var(--text-secondary);
+            margin-top: 2px;
+        }
+
+        .learning-progress-bar {
+            width: 100%;
+            height: 12px;
+            background: var(--bg-primary);
+            border-radius: 999px;
+            overflow: hidden;
+            margin-bottom: 10px;
+        }
+
+        .learning-progress-fill {
+            height: 100%;
+            width: 0;
+            background: linear-gradient(90deg, var(--success) 0%, #22d3ee 100%);
+            transition: width 0.3s ease;
+        }
+
+        .learning-settings-form {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px 14px;
+            align-items: flex-end;
+            margin-top: 10px;
+        }
+
+        .learning-settings-form .field {
+            min-width: 180px;
+            flex: 1 1 180px;
+        }
+
+        .learning-settings-form .field label {
+            display: block;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: var(--text-secondary);
+            font-weight: 700;
+        }
+
+        .learning-settings-form .field input {
+            width: 100%;
+            padding: 8px 10px;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+        }
+
+        .learning-settings-hint {
+            margin-top: 8px;
+            font-size: 12px;
+            color: var(--text-secondary);
+        }
+
+        .learning-status-badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 12px;
+            font-size: 12px;
+            font-weight: 700;
+        }
+
+        .learning-status-badge.mastered {
+            background: rgba(16, 185, 129, 0.2);
+            color: #34d399;
+        }
+
+        .learning-status-badge.in_progress {
+            background: rgba(245, 158, 11, 0.2);
+            color: #fbbf24;
+        }
+
+        .learning-status-badge.unstarted {
+            background: rgba(107, 114, 128, 0.25);
+            color: #d1d5db;
+        }
         
         .word-table {
             width: 100%;
@@ -1110,6 +1225,45 @@
         <!-- 單字列表頁面 -->
         <div id="list-tab" class="tab-content">
             <div class="word-list">
+                <div class="learning-progress-panel">
+                    <h3>📈 學習進度</h3>
+                    <div class="learning-progress-grid">
+                        <div class="learning-progress-item">
+                            <div class="label">已學會 / 總數</div>
+                            <div class="value" id="lp-mastered-total">0 / 0</div>
+                            <div class="sub" id="lp-mastered-rate">達成率 0%</div>
+                        </div>
+                        <div class="learning-progress-item">
+                            <div class="label">學習中</div>
+                            <div class="value" id="lp-in-progress">0</div>
+                        </div>
+                        <div class="learning-progress-item">
+                            <div class="label">未開始</div>
+                            <div class="value" id="lp-unstarted">0</div>
+                        </div>
+                        <div class="learning-progress-item">
+                            <div class="label">差一步學會</div>
+                            <div class="value" id="lp-almost-mastered">0</div>
+                        </div>
+                    </div>
+                    <div class="learning-progress-bar">
+                        <div class="learning-progress-fill" id="lp-progress-fill"></div>
+                    </div>
+
+                    <div class="learning-settings-form">
+                        <div class="field">
+                            <label for="mastery-n-input">學會門檻 N（答對次數）</label>
+                            <input id="mastery-n-input" type="number" min="1" max="20" />
+                        </div>
+                        <div class="field">
+                            <label for="mastery-x-input">有效期 X（天）</label>
+                            <input id="mastery-x-input" type="number" min="1" max="365" />
+                        </div>
+                        <button class="btn btn-primary" type="button" onclick="saveLearningSettings()">💾 儲存指標</button>
+                        <button class="btn btn-secondary" type="button" onclick="resetLearningSettingsToRecommended()">↺ 恢復建議值</button>
+                    </div>
+                    <div class="learning-settings-hint" id="lp-settings-hint">建議值：N=3、X=30 天。可調整，但建議先用預設。</div>
+                </div>
                 <h3>已儲存的單字</h3>
                 <div id="word-list-container">
                     <!-- 單字列表會動態載入這裡 -->
@@ -1268,6 +1422,8 @@
         let hintCount = 0;
         let answered = false;
         let kanaHintBoosted = false;
+        let learningProgressData = null;
+        let learningStatusByWordId = {};
         
         // 頁面載入時讀取儲存的 API Keys
         document.addEventListener('DOMContentLoaded', function() {
@@ -1651,7 +1807,7 @@
             } else if (tab === 'typing') {
                 loadTypingQuiz();
             } else if (tab === 'list') {
-                loadWordList();
+                loadListTabData();
             }
         }
         
@@ -1665,6 +1821,88 @@
             showToast._tid = setTimeout(() => {
                 el.style.display = 'none';
             }, 4000);
+        }
+
+        function getLearningStatusMeta(status) {
+            if (status === 'mastered') return { cls: 'mastered', label: '已學會' };
+            if (status === 'in_progress') return { cls: 'in_progress', label: '學習中' };
+            return { cls: 'unstarted', label: '未開始' };
+        }
+
+        async function loadLearningProgress() {
+            const res = await fetch('/api/learning-progress');
+            if (!res.ok) throw new Error('讀取學習進度失敗');
+
+            learningProgressData = await res.json();
+            learningStatusByWordId = learningProgressData.per_word_status || {};
+
+            const summary = learningProgressData.summary || {};
+            const settings = learningProgressData.settings || {};
+            const rec = settings.recommended || {};
+
+            const total = summary.total_words || 0;
+            const mastered = summary.mastered || 0;
+            const inProgress = summary.in_progress || 0;
+            const unstarted = summary.unstarted || 0;
+            const almostMastered = summary.almost_mastered || 0;
+            const rate = summary.mastered_rate || 0;
+
+            document.getElementById('lp-mastered-total').textContent = `${mastered} / ${total}`;
+            document.getElementById('lp-mastered-rate').textContent = `達成率 ${rate}%`;
+            document.getElementById('lp-in-progress').textContent = String(inProgress);
+            document.getElementById('lp-unstarted').textContent = String(unstarted);
+            document.getElementById('lp-almost-mastered').textContent = String(almostMastered);
+            document.getElementById('lp-progress-fill').style.width = `${Math.min(100, Math.max(0, rate))}%`;
+
+            document.getElementById('mastery-n-input').value = settings.mastery_correct_n ?? 3;
+            document.getElementById('mastery-x-input').value = settings.mastery_active_days ?? 30;
+            document.getElementById('lp-settings-hint').textContent =
+                `建議值：N=${rec.mastery_correct_n ?? 3}、X=${rec.mastery_active_days ?? 30} 天。` +
+                ` 你目前：N=${settings.mastery_correct_n ?? 3}、X=${settings.mastery_active_days ?? 30}。`;
+        }
+
+        async function saveLearningSettings() {
+            const masteryN = parseInt(document.getElementById('mastery-n-input').value, 10);
+            const activeX = parseInt(document.getElementById('mastery-x-input').value, 10);
+
+            const res = await fetch('/api/learning-settings', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    mastery_correct_n: Number.isFinite(masteryN) ? masteryN : 3,
+                    mastery_active_days: Number.isFinite(activeX) ? activeX : 30,
+                }),
+            });
+            const data = await res.json();
+            if (!res.ok || !data.success) {
+                throw new Error(data.error || '儲存失敗');
+            }
+
+            await loadLearningProgress();
+            await loadWordList();
+            showToast('學習指標已更新', 'success');
+        }
+
+        async function resetLearningSettingsToRecommended() {
+            if (!learningProgressData || !learningProgressData.settings || !learningProgressData.settings.recommended) {
+                await loadLearningProgress();
+            }
+            const rec = (learningProgressData.settings || {}).recommended || {
+                mastery_correct_n: 3,
+                mastery_active_days: 30,
+            };
+            document.getElementById('mastery-n-input').value = rec.mastery_correct_n;
+            document.getElementById('mastery-x-input').value = rec.mastery_active_days;
+            await saveLearningSettings();
+        }
+
+        async function loadListTabData() {
+            try {
+                await loadLearningProgress();
+            } catch (e) {
+                showToast(`讀取學習進度失敗：${e.message}`, 'error');
+            }
+            await loadWordList();
         }
         
         // 日文詞輸入框按 Enter 觸發 AI 生成（不觸發表單送出）
@@ -1798,13 +2036,9 @@
             try {
                 let result;
                 
-                // Gemini：直接從瀏覽器呼叫（使用用戶 IP）
-                if (provider === 'gemini') {
-                    const apiKeys = getApiKeys().filter(k => k.enabled).map(k => k.key);
-                    if (apiKeys.length === 0) {
-                        throw new Error('請先設定 Gemini API Key');
-                    }
-                    
+                // Gemini：有填 key 時直接從瀏覽器呼叫；未填則走後端（使用伺服器 .env 的 key）
+                const apiKeys = getApiKeys().filter(k => k.enabled).map(k => k.key);
+                if (provider === 'gemini' && apiKeys.length > 0) {
                     const results = [];
                     const errors = [];
                     let totalWaitTime = 0;
@@ -1902,7 +2136,7 @@
                     };
                     
                 } else {
-                    // 透過後端（OpenRouter 或 Groq）
+                    // 透過後端：OpenRouter、Groq，或 Gemini（未填 key 時用伺服器 .env）
                     const requestBody = {
                         words: newWords.join('\n'),
                         api_provider: provider
@@ -2373,6 +2607,7 @@
                                 <th>假名</th>
                                 <th>簡短中文</th>
                                 <th>來源</th>
+                                <th>學習狀態</th>
                                 <th>選擇題</th>
                                 <th>打字</th>
                                 <th>操作</th>
@@ -2386,12 +2621,15 @@
                     const typingStats = `✓${word.typing_correct || 0} ✗${word.typing_wrong || 0}`;
                     const source = word.source || 'manual';
                     const sourceLabel = sourceText[source] || source;
+                    const learning = learningStatusByWordId[String(word.id)] || { status: 'unstarted' };
+                    const statusMeta = getLearningStatusMeta(learning.status);
                     tableHtml += `
                         <tr class="word-row" data-word-id="${word.id}">
                             <td><strong>${word.japanese_word}</strong></td>
                             <td>${word.kana_form || '-'}</td>
                             <td>${word.chinese_short || '-'}</td>
                             <td><span class="source-badge source-${source}">${sourceLabel}</span></td>
+                            <td><span class="learning-status-badge ${statusMeta.cls}">${statusMeta.label}</span></td>
                             <td class="stats-cell">${quizStats}</td>
                             <td class="stats-cell">${typingStats}</td>
                             <td>
@@ -2400,7 +2638,7 @@
                             </td>
                         </tr>
                         <tr class="word-detail-row" id="detail-row-${word.id}" style="display: none;">
-                            <td colspan="7">
+                            <td colspan="8">
                                 <div class="word-detail-content">
                                     <div class="detail-grid">
                                         <div class="detail-item"><strong>日文詞：</strong>${word.japanese_word || '-'}</div>
@@ -2451,7 +2689,7 @@
             try {
                 const response = await fetch(`/api/words/${id}`, { method: 'DELETE' });
                 if (response.ok) {
-                    loadWordList();
+                    await loadListTabData();
                 }
             } catch (error) {
                 alert('刪除失敗：' + error.message);
@@ -2825,13 +3063,9 @@
                 
                 let result;
                 
-                // Gemini：直接從瀏覽器呼叫（使用用戶 IP）
-                if (provider === 'gemini') {
-                    const apiKeys = getApiKeys().filter(k => k.enabled).map(k => k.key);
-                    if (apiKeys.length === 0) {
-                        throw new Error('請先設定 Gemini API Key');
-                    }
-                    
+                // Gemini：有填 key 時直接從瀏覽器呼叫；未填則走後端（使用伺服器 .env 的 key）
+                const apiKeys = getApiKeys().filter(k => k.enabled).map(k => k.key);
+                if (provider === 'gemini' && apiKeys.length > 0) {
                     // 選擇第一個可用的 API Key
                     let selectedKey = null;
                     for (const key of apiKeys) {
@@ -2885,7 +3119,7 @@
                     if (!result.common_form) result.common_form = 'kanji';
                     
                 } else {
-                    // 透過後端（OpenRouter 或 Groq）
+                    // 透過後端：OpenRouter、Groq，或 Gemini（未填 key 時用伺服器 .env）
                     const requestBody = { 
                         japanese_word: japaneseWord,
                         api_provider: provider
@@ -2896,6 +3130,7 @@
                         requestBody.groq_key = getGroqKey();
                         requestBody.groq_model = getGroqModel();
                     }
+                    // Gemini 未填 key 時不帶 api_key，後端會用 .env 的 GEMINI_API_KEY
                     
                     const response = await fetch('/api/generate', {
                         method: 'POST',

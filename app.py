@@ -133,11 +133,27 @@ def get_working_model(api_key):
     
     return MODEL_PRIORITY[-1]  # 預設使用最後一個
 DATABASE = 'vocabulary.db'
+LEARNING_SETTING_MASTERY_N = "mastery_correct_n"
+LEARNING_SETTING_ACTIVE_X = "mastery_active_days"
+LEARNING_DEFAULT_MASTERY_N = 3
+LEARNING_DEFAULT_ACTIVE_X = 30
 
 def get_db():
     conn = sqlite3.connect(DATABASE)
     conn.row_factory = sqlite3.Row
     return conn
+
+
+def _clamp_int(value, default, minimum, maximum):
+    try:
+        n = int(value)
+    except Exception:
+        return default
+    if n < minimum:
+        return minimum
+    if n > maximum:
+        return maximum
+    return n
 
 
 def _normalize_source_filter(source_value):
@@ -147,6 +163,65 @@ def _normalize_source_filter(source_value):
     if source in ALLOWED_QUIZ_SOURCES:
         return source
     return "__invalid__"
+
+
+def _get_learning_settings(conn):
+    rows = conn.execute(
+        "SELECT key, value FROM settings WHERE key IN (?, ?)",
+        (LEARNING_SETTING_MASTERY_N, LEARNING_SETTING_ACTIVE_X),
+    ).fetchall()
+    values = {row["key"]: row["value"] for row in rows}
+    mastery_n = _clamp_int(
+        values.get(LEARNING_SETTING_MASTERY_N),
+        LEARNING_DEFAULT_MASTERY_N,
+        1,
+        20,
+    )
+    active_x = _clamp_int(
+        values.get(LEARNING_SETTING_ACTIVE_X),
+        LEARNING_DEFAULT_ACTIVE_X,
+        1,
+        365,
+    )
+    return mastery_n, active_x
+
+
+def _parse_iso_datetime(text):
+    if not text:
+        return None
+    try:
+        return datetime.fromisoformat(text)
+    except Exception:
+        return None
+
+
+def _word_learning_status(word, mastery_n, active_x, now=None):
+    now = now or datetime.now()
+    quiz_total = (word["quiz_correct"] or 0) + (word["quiz_wrong"] or 0)
+    typing_total = (word["typing_correct"] or 0) + (word["typing_wrong"] or 0)
+    total_attempts = quiz_total + typing_total
+    total_correct = (word["quiz_correct"] or 0) + (word["typing_correct"] or 0)
+    total_wrong = (word["quiz_wrong"] or 0) + (word["typing_wrong"] or 0)
+
+    last_quiz = _parse_iso_datetime(word["last_quiz_at"])
+    last_typing = _parse_iso_datetime(word["last_typing_at"])
+    last_studied_at = max(
+        [dt for dt in (last_quiz, last_typing) if dt is not None],
+        default=None,
+    )
+
+    if total_attempts <= 0:
+        return "unstarted", total_correct, total_wrong, last_studied_at
+
+    if last_studied_at is None:
+        # 舊資料可能還沒有 last_quiz_at/last_typing_at
+        return "in_progress", total_correct, total_wrong, last_studied_at
+
+    learned_window = timedelta(days=active_x)
+    recent_enough = (now - last_studied_at) <= learned_window
+    if total_correct >= mastery_n and recent_enough:
+        return "mastered", total_correct, total_wrong, last_studied_at
+    return "in_progress", total_correct, total_wrong, last_studied_at
 
 def init_db():
     conn = get_db()
@@ -172,6 +247,12 @@ def init_db():
             typing_correct INTEGER DEFAULT 0,
             typing_wrong INTEGER DEFAULT 0,
             typing_next_review TEXT
+        )
+    ''')
+    conn.execute('''
+        CREATE TABLE IF NOT EXISTS settings (
+            key TEXT PRIMARY KEY,
+            value TEXT
         )
     ''')
     # 資料庫升級 - 新增欄位
@@ -216,6 +297,20 @@ def init_db():
         conn.execute('ALTER TABLE words ADD COLUMN source_title TEXT')
     if 'source_lyric_id' not in columns:
         conn.execute('ALTER TABLE words ADD COLUMN source_lyric_id INTEGER')
+    if 'last_quiz_at' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN last_quiz_at TEXT')
+    if 'last_typing_at' not in columns:
+        conn.execute('ALTER TABLE words ADD COLUMN last_typing_at TEXT')
+
+    # 學習進度設定預設值
+    conn.execute(
+        "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+        (LEARNING_SETTING_MASTERY_N, str(LEARNING_DEFAULT_MASTERY_N)),
+    )
+    conn.execute(
+        "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+        (LEARNING_SETTING_ACTIVE_X, str(LEARNING_DEFAULT_ACTIVE_X)),
+    )
     
     conn.commit()
     conn.close()
@@ -355,6 +450,123 @@ def check_words_batch():
     
     conn.close()
     return jsonify({'results': results})
+
+
+@app.route('/api/learning-settings', methods=['GET'])
+def get_learning_settings():
+    conn = get_db()
+    mastery_n, active_x = _get_learning_settings(conn)
+    conn.close()
+    return jsonify({
+        'mastery_correct_n': mastery_n,
+        'mastery_active_days': active_x,
+        'recommended': {
+            'mastery_correct_n': LEARNING_DEFAULT_MASTERY_N,
+            'mastery_active_days': LEARNING_DEFAULT_ACTIVE_X,
+        }
+    })
+
+
+@app.route('/api/learning-settings', methods=['POST'])
+def save_learning_settings():
+    data = request.json or {}
+    mastery_n = _clamp_int(
+        data.get('mastery_correct_n'),
+        LEARNING_DEFAULT_MASTERY_N,
+        1,
+        20,
+    )
+    active_x = _clamp_int(
+        data.get('mastery_active_days'),
+        LEARNING_DEFAULT_ACTIVE_X,
+        1,
+        365,
+    )
+
+    conn = get_db()
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        (LEARNING_SETTING_MASTERY_N, str(mastery_n)),
+    )
+    conn.execute(
+        "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+        (LEARNING_SETTING_ACTIVE_X, str(active_x)),
+    )
+    conn.commit()
+    conn.close()
+
+    return jsonify({
+        'success': True,
+        'mastery_correct_n': mastery_n,
+        'mastery_active_days': active_x,
+        'recommended': {
+            'mastery_correct_n': LEARNING_DEFAULT_MASTERY_N,
+            'mastery_active_days': LEARNING_DEFAULT_ACTIVE_X,
+        }
+    })
+
+
+@app.route('/api/learning-progress', methods=['GET'])
+def get_learning_progress():
+    conn = get_db()
+    mastery_n, active_x = _get_learning_settings(conn)
+    rows = conn.execute(
+        '''
+        SELECT id, japanese_word, quiz_correct, quiz_wrong, typing_correct, typing_wrong, last_quiz_at, last_typing_at
+        FROM words
+        ORDER BY id DESC
+        '''
+    ).fetchall()
+    conn.close()
+
+    now = datetime.now()
+    total_words = len(rows)
+    mastered_count = 0
+    in_progress_count = 0
+    unstarted_count = 0
+    almost_mastered = 0
+    per_word_status = {}
+
+    for row in rows:
+        status, total_correct, total_wrong, last_studied_at = _word_learning_status(
+            row, mastery_n, active_x, now=now
+        )
+        per_word_status[str(row['id'])] = {
+            'status': status,
+            'total_correct': total_correct,
+            'total_wrong': total_wrong,
+            'last_studied_at': last_studied_at.isoformat() if last_studied_at else None,
+        }
+        if status == 'mastered':
+            mastered_count += 1
+        elif status == 'in_progress':
+            in_progress_count += 1
+            if total_correct == mastery_n - 1:
+                almost_mastered += 1
+        else:
+            unstarted_count += 1
+
+    mastered_rate = round((mastered_count / total_words) * 100, 1) if total_words else 0.0
+
+    return jsonify({
+        'settings': {
+            'mastery_correct_n': mastery_n,
+            'mastery_active_days': active_x,
+            'recommended': {
+                'mastery_correct_n': LEARNING_DEFAULT_MASTERY_N,
+                'mastery_active_days': LEARNING_DEFAULT_ACTIVE_X,
+            }
+        },
+        'summary': {
+            'total_words': total_words,
+            'mastered': mastered_count,
+            'in_progress': in_progress_count,
+            'unstarted': unstarted_count,
+            'mastered_rate': mastered_rate,
+            'almost_mastered': almost_mastered,
+        },
+        'per_word_status': per_word_status,
+    })
 
 @app.route('/api/words/<int:word_id>', methods=['DELETE'])
 def delete_word(word_id):
@@ -555,6 +767,8 @@ def record_answer():
         conn.close()
         return jsonify({'error': '找不到單字'}), 404
     
+    now_iso = datetime.now().isoformat()
+
     if quiz_type == 'quiz':
         correct = (word['quiz_correct'] or 0) + (1 if is_correct else 0)
         wrong = (word['quiz_wrong'] or 0) + (0 if is_correct else 1)
@@ -577,9 +791,10 @@ def record_answer():
                 quiz_wrong = ?, 
                 quiz_next_review = ?,
                 quiz_hint_count = ?,
-                quiz_hint_sessions = ?
+                quiz_hint_sessions = ?,
+                last_quiz_at = ?
             WHERE id = ?
-        ''', (correct, wrong, next_review, current_hint_count, current_hint_sessions, word_id))
+        ''', (correct, wrong, next_review, current_hint_count, current_hint_sessions, now_iso, word_id))
     else:  # typing
         correct = (word['typing_correct'] or 0) + (1 if is_correct else 0)
         wrong = (word['typing_wrong'] or 0) + (0 if is_correct else 1)
@@ -602,9 +817,10 @@ def record_answer():
                 typing_wrong = ?, 
                 typing_next_review = ?,
                 typing_hint_count = ?,
-                typing_hint_sessions = ?
+                typing_hint_sessions = ?,
+                last_typing_at = ?
             WHERE id = ?
-        ''', (correct, wrong, next_review, current_hint_count, current_hint_sessions, word_id))
+        ''', (correct, wrong, next_review, current_hint_count, current_hint_sessions, now_iso, word_id))
     
     conn.commit()
     conn.close()
@@ -643,10 +859,10 @@ def record_quiz_kana_hint():
     conn.execute(
         '''
         UPDATE words
-        SET typing_hint_count = ?, typing_hint_sessions = ?, typing_next_review = ?
+        SET typing_hint_count = ?, typing_hint_sessions = ?, typing_next_review = ?, last_typing_at = ?
         WHERE id = ?
         ''',
-        (hint_count, hint_sessions, next_review, word_id),
+        (hint_count, hint_sessions, next_review, datetime.now().isoformat(), word_id),
     )
     conn.commit()
     conn.close()
@@ -749,6 +965,58 @@ def get_best_api_key(api_keys_str):
     
     return best_key, keys
 
+
+def _is_transient_network_error(exc):
+    msg = str(exc).lower()
+    keywords = (
+        "broken pipe",
+        "connection reset",
+        "remote end closed",
+        "connection aborted",
+        "timed out",
+        "timeout",
+        "temporarily unavailable",
+    )
+    return any(k in msg for k in keywords)
+
+
+def _post_with_retry(url, *, headers, payload, timeout=60, max_attempts=3, log_prefix="[HTTP]"):
+    last_error = None
+    backoff = 0.8
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            resp = requests.post(
+                url,
+                headers={**headers, "Connection": "close"},
+                json=payload,
+                timeout=timeout,
+            )
+            if resp.status_code in {408, 425, 429, 500, 502, 503, 504} and attempt < max_attempts:
+                print(
+                    f"{log_prefix} 暫時性 HTTP {resp.status_code}，"
+                    f"{backoff:.1f}s 後重試（{attempt}/{max_attempts}）"
+                )
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            return resp
+        except requests.exceptions.RequestException as exc:
+            last_error = exc
+            if attempt < max_attempts and _is_transient_network_error(exc):
+                print(
+                    f"{log_prefix} 暫時性網路錯誤：{exc}，"
+                    f"{backoff:.1f}s 後重試（{attempt}/{max_attempts}）"
+                )
+                time.sleep(backoff)
+                backoff *= 2
+                continue
+            raise
+
+    if last_error:
+        raise last_error
+    raise RuntimeError("請求失敗")
+
 def call_openrouter_api(api_key, prompt, model=None):
     """呼叫 OpenRouter API，自動嘗試多個免費模型"""
     
@@ -779,7 +1047,14 @@ def call_openrouter_api(api_key, prompt, model=None):
                 "temperature": 0.7
             }
             
-            response = requests.post(OPENROUTER_API_URL, headers=headers, json=data, timeout=60)
+            response = _post_with_retry(
+                OPENROUTER_API_URL,
+                headers=headers,
+                payload=data,
+                timeout=60,
+                max_attempts=3,
+                log_prefix=f"[OpenRouter:{try_model}]",
+            )
             
             if response.status_code == 200:
                 result = response.json()
@@ -821,7 +1096,14 @@ def call_groq_api(api_key, prompt, model_name=None):
         "messages": [{"role": "user", "content": prompt}],
         "temperature": 0.7,
     }
-    r = requests.post(GROQ_API_URL, headers=headers, json=payload, timeout=60)
+    r = _post_with_retry(
+        GROQ_API_URL,
+        headers=headers,
+        payload=payload,
+        timeout=60,
+        max_attempts=3,
+        log_prefix=f"[Groq:{model}]",
+    )
     if r.status_code != 200:
         try:
             err_json = r.json()
@@ -988,9 +1270,24 @@ def generate_word_info():
         for model_name in MODEL_PRIORITY:
             try:
                 model = genai_module.GenerativeModel(model_name)
-                
-                response = model.generate_content(prompt)
-                result_text = response.text.strip()
+
+                result_text = ""
+                max_attempts = 3
+                for attempt in range(1, max_attempts + 1):
+                    try:
+                        response = model.generate_content(prompt)
+                        result_text = response.text.strip()
+                        break
+                    except Exception as e:
+                        if attempt < max_attempts and _is_transient_network_error(e):
+                            wait_sec = 0.8 * (2 ** (attempt - 1))
+                            print(
+                                f"[Gemini:{model_name}] 暫時性錯誤：{e}，"
+                                f"{wait_sec:.1f}s 後重試（{attempt}/{max_attempts}）"
+                            )
+                            time.sleep(wait_sec)
+                            continue
+                        raise
                 
                 # 清理可能的 markdown 格式
                 if result_text.startswith('```'):
